@@ -12,8 +12,26 @@ The name _infinitum_ comes from Latin and means "infinity". The name was chosen 
 
 ## Usage
 
-Assuming you have [Streamlit](https://streamlit.io/) installed, just run:
+Assuming you have [Streamlit](https://streamlit.io/) installed,
+
+First clone the repository on to your machine:
+
+```bash
+git clone https://codeberg.org/elaraproject/elara-symbolic-ui.git
+```
+
+Then, from the repo you have cloned, just run:
 
 ```bash
 python -m streamlit src/main.py
 ```
+
+## Future Features
+
+- Create an interface capable of processing and solving differential equations input as LaTeX by users
+- Add graphs of the differential equations so that the user can visualize the equation they have input
+
+## Contributors
+[Jacky Song](https://codeberg.org/songtech-0912)
+[Jacob Thomas](https://codeberg.org/NHWXCodeberg)
+[David Yang](https://codeberg.org/David_Y)
