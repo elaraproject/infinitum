@@ -2,7 +2,7 @@
 
 This is a Desmos-like webapp that serves as a frontend to Elara symbolic and SymPy, allowing using the library without any coding experience. Includes facilities for computing derivatives and integrals (both symbolically and numerically) as well as solving differential equations.
 
-> Currently the app is MIT-licensed, but if all contributors are willing, I would be more than happy to turn it into public-domain licensed software.
+> Currently the app is MIT-licensed, but if all contributors are willing, we would be more than happy to turn it into public-domain licensed software.
 
 ## Why the name?
 
@@ -20,10 +20,18 @@ First clone the repository on to your machine:
 git clone https://codeberg.org/elaraproject/elara-symbolic-ui.git
 ```
 
+Install dependencies:
+
+```bash
+pip install streamlit streamlit-mathlive
+```
+
 Then, from the repo you have cloned, just run:
 
 ```bash
 python -m streamlit src/main.py
+# if the above command doesn't work, run below command instead
+python -m streamlit run main.py --global.developmentMode=false
 ```
 
 ## Future Features
@@ -32,6 +40,7 @@ python -m streamlit src/main.py
 - Add graphs of the differential equations so that the user can visualize the equation they have input
 
 ## Contributors
-[Jacky Song](https://codeberg.org/songtech-0912)
-[Jacob Thomas](https://codeberg.org/NHWXCodeberg)
-[David Yang](https://codeberg.org/David_Y)
+
+- [Jacky Song](https://codeberg.org/songtech-0912)
+- [Jacob Thomas](https://codeberg.org/NHWXCodeberg)
+- [David Yang](https://codeberg.org/David_Y)
