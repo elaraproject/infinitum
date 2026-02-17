@@ -23,7 +23,7 @@ git clone https://codeberg.org/elaraproject/elara-symbolic-ui.git
 Install dependencies:
 
 ```bash
-pip install streamlit streamlit-mathlive
+pip install -r requirements.txt
 ```
 
 Then, from the repo you have cloned, just run:
@@ -31,7 +31,7 @@ Then, from the repo you have cloned, just run:
 ```bash
 python -m streamlit src/main.py
 # if the above command doesn't work, run below command instead
-python -m streamlit run main.py --global.developmentMode=false
+python -m streamlit run src/main.py --global.developmentMode=false
 ```
 
 ## Future Features

@@ -1,0 +1,6 @@
+streamlit==1.54.0
+streamlit-mathlive==0.0.3
+beautifulsoup4==4.14.3
+sympy==1.14.0
+antlr4-python3-runtime==4.11.0
+elara_symbolic @ git+https://codeberg.org/elaraproject/elara-symbolic
