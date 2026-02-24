@@ -2,6 +2,7 @@ import streamlit as st
 from bs4 import BeautifulSoup
 from sympy.parsing.latex import parse_latex
 from elara_symbolic.calculate import *
+from st_mathlive import mathfield
 
 st.write("""
 # Elara-symbolic UI
@@ -9,37 +10,35 @@ st.write("""
 Currently being developed...
 """)
 
-import streamlit as st
-from st_mathlive import mathfield
-
-Tex, MathML = mathfield(title="Enter Equations Here", upright=False, mathml_preview=False)
+Tex, MathML = mathfield(title="Enter Equations Here", value="3+3", mathml_preview=True, upright=False)
 
 #NOTE: BUG EXISTS WHERE IT MAY HAVE TROUBLE PARSING CERTAIN UPRIGHT EQUATIONS, DO NOT CHECK THAT BOX
 Tex = Tex.replace("\differentialD", "d")
-print("RIGHT HERE" + Tex)
-expr = parse_latex(Tex, strict=True)
+print(Tex)
+expr = parse_latex(Tex, strict=False)
 
 # define your unknown function
 # to be solved for
 # here it is y(x)
 y = Function("y")(x)
 
-# define a dummy constant for solving the differential equation
-k = Symbol("k", constant=True, real=True)
+lowerRange = st.number_input(label="Enter Lower Number Bound: ", value=0.0)
+upperRange = st.number_input(label="Enter Upper Number Bound: ", value=1.0)
 
-# define the differential equation with SymPy
-diffeq = Eq(D(y, x) - k*y*(1-y), 0)
 
-range = st.slider("Enter Differential Equation Range:", 0, 130, 25)
-
-#output the latex so we know that sympy has properly processed the equation and graph it for the user
-de_sols = solve_ode(expr, y, y0=0.0, t_span=(0, range), constants=[(k, 1.0)], step_size=0.01)
-if type(de_sols) != type(None):
-    st.line_chart(de_sols['y'])
+if upperRange <= lowerRange:
+    st.write("Unable to display equation: lower bound is greater than or equal to lower bound ")
 else:
-    #this converts our sympy back into latex so it can be displayed again to the human eye so
-    #accuracy can be confirmed
-    newTex = latex(expr)
-    st.write("Invalid differential equation: ")
-    st.latex(newTex)
-    st.write("please enter a valid differential equation")
+    # define a dummy constant for solving the differential equation
+    k = Symbol("k", constant=True, real=True)
+    #solve the differential equation itself
+    de_sols = solve_ode(expr, y, y0=0.0, t_span=(lowerRange, upperRange), constants=[(k, 1.0)], step_size=0.01)
+    if type(de_sols) != type(None):
+        st.line_chart(de_sols['y'])
+    else:
+        #this converts our sympy back into latex so it can be displayed again to the human eye so
+        #accuracy can be confirmed
+        newTex = latex(expr)
+        st.write("Invalid differential equation: ")
+        st.latex(newTex)
+        st.write("please enter a valid differential equation")
