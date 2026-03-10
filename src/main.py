@@ -10,10 +10,13 @@ st.write("""
 Currently being developed...
 """)
 
-Tex, MathML = mathfield(title="Enter Equations Here", value="3+3", mathml_preview=True, upright=False)
+Tex, MathML = mathfield(title="Enter Equations Here", value=r"\frac{dy}{dx} = y(1 - y)", mathml_preview=True, upright=False)
 
 #NOTE: BUG EXISTS WHERE IT MAY HAVE TROUBLE PARSING CERTAIN UPRIGHT EQUATIONS, DO NOT CHECK THAT BOX
-Tex = Tex.replace("\differentialD", "d")
+Tex = Tex.replace(r"\differentialD", "d")
+#parse for upright equations TODO: Remove the option for upright equations
+if (Tex[0:8] == "\mathrm{"):
+    Tex = Tex[8:-1]
 print(Tex)
 expr = parse_latex(Tex, strict=False)
 
