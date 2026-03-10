@@ -14,6 +14,7 @@ def process_raw_text(Tex: str):
 
     return newTex
 
+#solves the differential equation provided as raw LaTeX text
 def solve_differential_equation(Tex: str):
     #parse the LaTeX provided by the user into a differential equation
     expr = parse_latex(Tex, strict=False)
@@ -27,6 +28,21 @@ def solve_differential_equation(Tex: str):
     de_sols = solve_ode(expr, y, y0=0.0, t_span=(lowerRange, upperRange), constants=[(k, 1.0)], step_size=0.01)
 
     return de_sols
+
+#takes the equation, and the bounds and produces a graph from it
+def process_input_and_graph(upperRange: int, lowerRange: int, Tex: str):
+    if upperRange <= lowerRange:
+        st.write("Unable to display equation: lower bound is greater than or equal to lower bound ")
+    else:
+        de_sols = solve_differential_equation(Tex)
+        if type(de_sols) != type(None):
+            st.line_chart(de_sols['y'])
+        else:
+            #this converts our sympy back into latex so it can be displayed again to the human eye so
+            #accuracy can be confirmed
+            st.write("Invalid differential equation: ")
+            st.latex(Tex)
+            st.write("please enter a valid differential equation")
 
 st.write("""
 # Elara-symbolic UI
@@ -43,17 +59,4 @@ Tex = process_raw_text(Tex)
 lowerRange = st.number_input(label="Enter Lower Number Bound: ", value=0.0)
 upperRange = st.number_input(label="Enter Upper Number Bound: ", value=1.0)
 
-
-if upperRange <= lowerRange:
-    st.write("Unable to display equation: lower bound is greater than or equal to lower bound ")
-else:
-    de_sols = solve_differential_equation(Tex)
-    if type(de_sols) != type(None):
-        st.line_chart(de_sols['y'])
-    else:
-        #this converts our sympy back into latex so it can be displayed again to the human eye so
-        #accuracy can be confirmed
-        newTex = latex(expr)
-        st.write("Invalid differential equation: ")
-        st.latex(newTex)
-        st.write("please enter a valid differential equation")
+st.button(label="Solve Differential Equation", on_click=lambda: process_input_and_graph(upperRange, lowerRange, Tex))
