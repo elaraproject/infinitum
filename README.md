@@ -33,6 +33,19 @@ python -m streamlit src/main.py
 # if the above command doesn't work, run below command instead
 python -m streamlit run src/main.py --global.developmentMode=false
 ```
+## [Poetry](https://python-poetry.org/)   
+
+Install pipx
+
+```bash
+pip install pipx
+``` 
+
+Install Poetry
+
+```bash
+pipx install poetry
+``` 
 
 ## Future Features
 
