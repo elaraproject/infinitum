@@ -1,16 +1,16 @@
 import streamlit as st
-from bs4 import BeautifulSoup
 from sympy.parsing.latex import parse_latex
 from elara_symbolic.calculate import *
 from st_mathlive import mathfield
 
 #function for processing the mathlive user input into text that can be process by sympy
 def process_raw_text(Tex: str):
-    #NOTE: BUG EXISTS WHERE IT MAY HAVE TROUBLE PARSING CERTAIN UPRIGHT EQUATIONS, DO NOT CHECK THAT BOX
+    #we need this here because the mathfield often processes a simple d as this differentialD
+    #which confuses sympy so we replace that with the simple d.
     newTex = Tex.replace(r"\differentialD", "d")
     newTex = Tex.replace(r"y", "y(x)")
     #parse for upright equations TODO: Remove the option for upright equations
-    if (newTex[0:8] == "\mathrm{"):
+    if (r"\mathrm{" in newTex):
         newTex = newTex[8:-1]
 
     return newTex
@@ -52,7 +52,7 @@ st.write("""
 Currently being developed...
 """)
 
-Tex, MathML = mathfield(title="Enter Equations Here", value=r"\frac{dy}{dx} = y(1 - y)", mathml_preview=True, upright=False)
+Tex = mathfield(title="Enter Equations Here", value=r"\frac{dy}{dx} = y(1 - y)", mathml_preview=True, upright=False)
 
 #Code for preliminary processing of the LaTeX
 Tex = process_raw_text(Tex)
