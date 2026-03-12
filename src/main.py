@@ -8,6 +8,7 @@ from st_mathlive import mathfield
 def process_raw_text(Tex: str):
     #NOTE: BUG EXISTS WHERE IT MAY HAVE TROUBLE PARSING CERTAIN UPRIGHT EQUATIONS, DO NOT CHECK THAT BOX
     newTex = Tex.replace(r"\differentialD", "d")
+    newTex = Tex.replace(r"y", "y(x)")
     #parse for upright equations TODO: Remove the option for upright equations
     if (newTex[0:8] == "\mathrm{"):
         newTex = newTex[8:-1]
@@ -15,7 +16,7 @@ def process_raw_text(Tex: str):
     return newTex
 
 #solves the differential equation provided as raw LaTeX text
-def solve_differential_equation(Tex: str):
+def solve_differential_equation(upperRange: int, lowerRange: int, stepSize: int, Tex: str):
     #parse the LaTeX provided by the user into a differential equation
     expr = parse_latex(Tex, strict=False)
     # define your unknown function
@@ -25,16 +26,17 @@ def solve_differential_equation(Tex: str):
     # define a dummy constant for solving the differential equation
     k = Symbol("k", constant=True, real=True)
     #solve the differential equation itself
-    de_sols = solve_ode(expr, y, y0=0.0, t_span=(lowerRange, upperRange), constants=[(k, 1.0)], step_size=0.01)
+    print(expr)
+    de_sols = solve_ode(expr, y, y0=0.0, t_span=(lowerRange, upperRange), constants=[(k, 1.0)], step_size=stepSize)
 
     return de_sols
 
 #takes the equation, and the bounds and produces a graph from it
-def process_input_and_graph(upperRange: int, lowerRange: int, Tex: str):
+def process_input_and_graph(upperRange: int, lowerRange: int, stepSize: int, Tex: str):
     if upperRange <= lowerRange:
         st.write("Unable to display equation: lower bound is greater than or equal to lower bound ")
     else:
-        de_sols = solve_differential_equation(Tex)
+        de_sols = solve_differential_equation(upperRange, lowerRange, stepSize, Tex)
         if type(de_sols) != type(None):
             st.line_chart(de_sols['y'])
         else:
@@ -58,5 +60,6 @@ Tex = process_raw_text(Tex)
 #This is the code for the components letting the user set the bounds of the graph
 lowerRange = st.number_input(label="Enter Lower Number Bound: ", value=0.0)
 upperRange = st.number_input(label="Enter Upper Number Bound: ", value=1.0)
+stepSize = st.number_input(label="Enter Step Interval: ", value=0.01)
 
-st.button(label="Solve Differential Equation", on_click=lambda: process_input_and_graph(upperRange, lowerRange, Tex))
+st.button(label="Solve Differential Equation", on_click=lambda: process_input_and_graph(upperRange, lowerRange, stepSize, Tex))
