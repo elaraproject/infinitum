@@ -1,5 +1,6 @@
 import streamlit as st
 from sympy.parsing.latex import parse_latex
+from sympy import Derivative
 from elara_symbolic.calculate import *
 from st_mathlive import mathfield
 
@@ -15,19 +16,22 @@ def process_raw_text(Tex: str):
     print(newTex)
     return newTex
 
-#solves the differential equation provided as raw LaTeX text
 def solve_differential_equation(upperRange: int, lowerRange: int, stepSize: int, Tex: str):
     #parse the LaTeX provided by the user into a differential equation
     expr = parse_latex(Tex, strict=False)
-    # define your unknown function
-    # to be solved for
-    # here it is y(x)
-    y = Function("y")(x)
+    #substitute whatever y symbol that sympy parses with a 
+    functions = [
+        Function(derivative.args[0])(derivative.args[1][0])
+        for derivative in expr.atoms(Derivative)
+    ]
+    for i in functions:
+        expr = expr.subs(Symbol(i.func.__name__), i)
+
     # define a dummy constant for solving the differential equation
     k = Symbol("k", constant=True, real=True)
     #solve the differential equation itself
     print(expr)
-    de_sols = solve_ode(expr, y, y0=0.0, t_span=(lowerRange, upperRange), constants=[(k, 1.0)], step_size=stepSize)
+    de_sols = solve_ode(expr, functions[0], y0=0.0, t_span=(lowerRange, upperRange), constants=[(k, 1.0)], step_size=stepSize)
 
     return de_sols
 
