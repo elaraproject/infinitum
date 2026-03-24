@@ -1,8 +1,10 @@
 [project]
-name = "elara"
+name = "elara-symbolic-ui" # may be changed to 'infinitum' in future
 version = "0.1.0"
-description = ""
+description = "Web UI for elara-symbolic (Project Elara's toolkit for physics and engineering computations)"
 authors = [
+	{name = "Jacob Thomas",email = "jstevethom@gmail.com"},
+	{name = "Jacky Song",email = "jacky.song.elara@gmail.com"},
     {name = "David Yang",email = "yangd12@rpi.edu"}
 ]
 license = {text = "mit"}
@@ -16,7 +18,8 @@ dependencies = [
     "elara-symbolic @ git+https://codeberg.org/elaraproject/elara-symbolic"
 ]
 
-
+[tool.poetry]
+package-mode = false
 
 [build-system]
 requires = ["poetry-core>=2.0.0,<3.0.0"]
