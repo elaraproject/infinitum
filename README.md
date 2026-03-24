@@ -1,6 +1,6 @@
 # Infinitum
 
-This is a Desmos-like webapp that serves as a frontend to Elara symbolic and SymPy, allowing using the library without any coding experience. Includes facilities for computing derivatives and integrals (both symbolically and numerically) as well as solving differential equations.
+This is a Desmos-like webapp that serves as a frontend to the [Elara symbolic](https://codeberg.org/elaraproject/elara-symbolic) library, allowing using the library without any coding experience. Includes facilities for computing derivatives and integrals (both symbolically and numerically) as well as solving differential equations.
 
 > Currently the app is MIT-licensed, but if all contributors are willing, we would be more than happy to turn it into public-domain licensed software.
 
