@@ -50,7 +50,24 @@ python -m streamlit src/main.py
 # if the above command doesn't work, run below command instead
 python -m streamlit run src/main.py --global.developmentMode=false
 ```
-## [Poetry](https://python-poetry.org/)   
+   
+
+## Basic development 
+
+(Assuming you installed [poetry](https://python-poetry.org/))
+Resolve and installs dependencies from pyproject.toml 
+```bash
+poetry install
+```
+> **Note:** Needed just on the first installation
+
+Then run:
+
+```bash
+poetry run streamlit run src/main.py
+```
+
+## Advanced installation
 
 Install pipx
 
