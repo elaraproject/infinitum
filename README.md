@@ -10,15 +10,32 @@ The name _infinitum_ comes from Latin and means "infinity". The name was chosen 
 
 > **Note:** The name right now is TBD, we may keep it as this or switch to another name.
 
-## Usage
-
-Assuming you have [Streamlit](https://streamlit.io/) installed,
+## Development instructions
 
 First clone the repository on to your machine:
 
 ```bash
 git clone https://codeberg.org/elaraproject/elara-symbolic-ui.git
 ```
+
+Make and activate a virtual environment (using conda is also fine):
+
+```bash
+python -m venv .venv/
+
+# Activate a virtual env
+
+# Linux/macOS
+source .venv/bin/activate
+
+# Windows powershell
+source .venv/Scripts/Activate.ps1
+
+# Git bash on Windows/Cygwin
+source .venv/Scripts/activate
+```
+
+> **Note:** You will have to activate the virtual environment whenever you are developing the app.
 
 Install dependencies:
 
