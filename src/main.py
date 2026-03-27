@@ -3,6 +3,7 @@ from sympy.parsing.latex import parse_latex
 from sympy import Derivative
 from elara_symbolic.calculate import *
 from st_mathlive import mathfield
+from pandas import DataFrame as df
 
 #function for processing the mathlive user input into text that can be process by sympy
 def process_raw_text(Tex: str):
@@ -13,7 +14,6 @@ def process_raw_text(Tex: str):
     if (r"\mathrm{" in newTex):
         newTex = newTex[8:-1]
 
-    print(newTex)
     return newTex
 
 def solve_differential_equation(upperRange: int, lowerRange: int, stepSize: int, Tex: str):
@@ -24,14 +24,19 @@ def solve_differential_equation(upperRange: int, lowerRange: int, stepSize: int,
         Function(derivative.args[0])(derivative.args[1][0])
         for derivative in expr.atoms(Derivative)
     ]
+    if len(functions) != 1:
+        raise ValueError("ERROR READING: DIFFERENTIAL EQUATION SHOULD HAVE ONE AND ONLY ONE FUNCTION\n")
     for i in functions:
         expr = expr.subs(Symbol(i.func.__name__), i)
+    for i in range(len(expr.args)):
+        if len(expr.args[i].args) == 1 and expr.args[i].func != functions[0]:
+            e = Symbol(str(expr.args[i].func)) * expr.args[i].args[0]
+            expr = expr.xreplace({expr.args[i]: e})
 
     # define a dummy constant for solving the differential equation
     k = Symbol("k", constant=True, real=True)
     #solve the differential equation itself
-    print(expr)
-    de_sols = solve_ode(expr, functions[0], y0=0.0, t_span=(lowerRange, upperRange), constants=[(k, 1.0)], step_size=stepSize)
+    de_sols = solve_ode(expr, functions[0], y0=0.5, t_span=(lowerRange, upperRange), constants=[(k, 1.0)], step_size=stepSize)
 
     return de_sols
 
@@ -42,7 +47,9 @@ def process_input_and_graph(upperRange: int, lowerRange: int, stepSize: int, Tex
     else:
         de_sols = solve_differential_equation(upperRange, lowerRange, stepSize, Tex)
         if type(de_sols) != type(None):
-            st.line_chart(de_sols['y'])
+            #create a dataframe containing the date and time and plot that dataframe
+            plotDF = df(de_sols['y'], de_sols['t']) 
+            st.line_chart(data=plotDF)
         else:
             #this converts our sympy back into latex so it can be displayed again to the human eye so
             #accuracy can be confirmed
