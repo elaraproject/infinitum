@@ -37,49 +37,46 @@ source .venv/Scripts/activate
 
 > **Note:** You will have to activate the virtual environment whenever you are developing the app.
 
-Install dependencies:
+There are now two ways to proceed; the recommended method, which uses [Poetry](https://python-poetry.org/), or an alternative method which doesn't use poetry.
+
+### Recommended installation
+
+We use the [Poetry](https://python-poetry.org/) package manager for dependency management. To install poetry, the full instructions are in the [Poetry docs](https://python-poetry.org/docs/). However, the basic installation can be done in two commands:
+
+```bash
+pip install pipx # only if you don't have pipx installed
+pipx install poetry
+``` 
+
+Assuming you have Poetry installed, run the following command to resolve and install dependencies from the `pyproject.toml` file. 
+
+```bash
+poetry install
+```
+
+> **Note:** This is needed **only** on the first installation!
+
+Afterwards, you can launch the app anytime by running:
+
+```bash
+poetry run streamlit run src/main.py
+```
+
+### Alternative installation
+
+If you don't want to use Poetry, it is also possible to install dependencies with just pip;
 
 ```bash
 pip install -r requirements.txt
 ```
 
-Then, from the repo you have cloned, just run:
+Then, from the repo you have cloned, just run the following commands to launch the app:
 
 ```bash
 python -m streamlit src/main.py
 # if the above command doesn't work, run below command instead
 python -m streamlit run src/main.py --global.developmentMode=false
 ```
-   
-
-## Basic development 
-
-(Assuming you installed [poetry](https://python-poetry.org/))
-Resolve and installs dependencies from pyproject.toml 
-```bash
-poetry install
-```
-> **Note:** Needed just on the first installation
-
-Then run:
-
-```bash
-poetry run streamlit run src/main.py
-```
-
-## Advanced installation
-
-Install pipx
-
-```bash
-pip install pipx
-``` 
-
-Install Poetry
-
-```bash
-pipx install poetry
-``` 
 
 ## Future Features
 
