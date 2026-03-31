@@ -1,7 +1,7 @@
 import streamlit as st
 from sympy.parsing.latex import parse_latex
-from sympy import Derivative
-from elara_symbolic.calculate import *
+from sympy import Derivative, Function, Symbol
+from elara_symbolic.cas import solve_ode
 from st_mathlive import mathfield
 from pandas import DataFrame as df
 
