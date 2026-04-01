@@ -1,9 +1,11 @@
 import streamlit as st
-from sympy.parsing.latex import parse_latex
+from sympy.parsing.latex import parse_latex, LaTeXParsingError
 from sympy import Derivative, Function, Symbol
 from elara_symbolic.cas import solve_ode
 from st_mathlive import mathfield
 from pandas import DataFrame as df
+
+st.toast("App loading...", icon="ℹ️", duration="short")
 
 #function for processing the mathlive user input into text that can be process by sympy
 def process_raw_text(Tex: str):
@@ -45,17 +47,45 @@ def process_input_and_graph(upperRange: int, lowerRange: int, stepSize: int, Tex
     if upperRange <= lowerRange:
         st.write("Unable to display equation: lower bound is greater than or equal to lower bound ")
     else:
-        de_sols = solve_differential_equation(upperRange, lowerRange, stepSize, Tex)
-        if type(de_sols) != type(None):
-            #create a dataframe containing the date and time and plot that dataframe
-            plotDF = df(de_sols['y'], de_sols['t']) 
-            st.line_chart(data=plotDF)
-        else:
-            #this converts our sympy back into latex so it can be displayed again to the human eye so
-            #accuracy can be confirmed
-            st.write("Invalid differential equation: ")
-            st.latex(Tex)
-            st.write("please enter a valid differential equation")
+        # Warn user; since it does actually take a while to solve
+        # and we don't want the user to think nothing is happening
+        st.toast("Solving might be slow and take a while",
+                 icon="ℹ️",
+                 duration="short")
+        with st.spinner("Solving in progress...", show_time=True) as status:
+            solve_complete = False
+            de_sols = None
+            # Crude way of blocking execution of further code
+            # while the differential equation is solved
+            while not solve_complete:
+                try:
+                    de_sols = solve_differential_equation(upperRange, lowerRange, stepSize, Tex)
+                except ValueError as e:
+                    st.error(f"Solve unsuccessful: {str(e)}")
+                solve_complete = True
+            if de_sols:
+                #create a dataframe containing the date and time and plot that dataframe
+                # this dataframe can be pretty slow to
+                # initialize though, so this
+                # is used here to prevent the UI elements
+                # from being displayed until the dataframe
+                # is successfully populated
+                plotDF = df(de_sols['y'], de_sols['t'])
+                st.success("Solve successful! Plotting solution...")
+                st.write(rf"**Numerical solution to** ${Tex}$")
+                st.line_chart(data=plotDF)
+            else:
+                #this converts our sympy back into latex so it can be displayed again to the human eye so
+                #accuracy can be confirmed
+                st.write("Invalid differential equation: ")
+                st.latex(Tex)
+                st.write("please enter a valid differential equation")
+    # pause further execution until the user
+    # inputs another differential equation
+    if st.button("Solve another differential equation"):
+        st.rerun()
+    else:
+        st.stop()
 
 st.write("""
 # Elara-symbolic UI
@@ -63,10 +93,19 @@ st.write("""
 Currently being developed...
 """)
 
-Tex, _ = mathfield(title="Enter Equations Here", value=r"\frac{dy}{dx} = y(1 - y)", mathml_preview=True, upright=False)
+default_ode = r"\frac{dy}{dx} = y(1 - y)"
+Tex = default_ode
+Tex, _ = mathfield(title="Enter Equations Here", value=default_ode, mathml_preview=True, upright=False)
+
+# Don't continue code execution until equation is specified
+if not Tex:
+    st.stop()
 
 #Code for preliminary processing of the LaTeX
-Tex = process_raw_text(Tex)
+try:
+    Tex = process_raw_text(Tex)
+except LaTeXParsingError:
+    st.error("Parsing of differential equation failed. Please check your inputted equation.")
 
 #This is the code for the components letting the user set the bounds of the graph
 lowerRange = st.number_input(label="Enter Lower Number Bound: ", value=0.0)
