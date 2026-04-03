@@ -62,6 +62,7 @@ Afterwards, you can launch the app anytime by running:
 poetry run streamlit run src/main.py
 ```
 
+
 ### Alternative installation
 
 If you don't want to use Poetry, it is also possible to install dependencies with just pip;
@@ -76,6 +77,17 @@ Then, from the repo you have cloned, just run the following commands to launch t
 python -m streamlit src/main.py
 # if the above command doesn't work, run below command instead
 python -m streamlit run src/main.py --global.developmentMode=false
+```
+
+### Running app in headless mode
+By default, the streamlit run command opens up the local web browser. This can be potentially intrusive and annoying if you want to use a browser other than your OS-set default browser. Instead, the following commands can be used to run in "headless mode", where streamlit will print the ocalhost web server address and allow you to open the webapp in the browser of your choice. This can be done by the following commands:
+
+```bash
+# with poetry
+poetry run streamlit run src/main.py --server.headless true
+
+# vanilla Python (without poetry)
+streamlit run src/main.py --server.headless true
 ```
 
 ## Future Features
