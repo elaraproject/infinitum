@@ -80,7 +80,7 @@ python -m streamlit run src/main.py --global.developmentMode=false
 ```
 
 ### Running app in headless mode
-By default, the streamlit run command opens up the local web browser. This can be potentially intrusive and annoying if you want to use a browser other than your OS-set default browser. Instead, the following commands can be used to run in "headless mode", where streamlit will print the ocalhost web server address and allow you to open the webapp in the browser of your choice. This can be done by the following commands:
+By default, the streamlit run command opens up the local web browser. This can be potentially intrusive and annoying if you want to use a browser other than your OS-set default browser. Instead, the following commands can be used to run in "headless mode", where streamlit will print the localhost web server address and allow you to open the webapp in the browser of your choice. This can be done by the following commands:
 
 ```bash
 # with poetry
