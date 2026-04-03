@@ -88,9 +88,11 @@ def process_input_and_graph(upperRange: int, lowerRange: int, stepSize: int, Tex
         st.stop()
 
 st.write("""
-# Elara-symbolic UI
+# Infinitum
 
-Currently being developed...
+An interactive differential equations solver, developed by [Project Elara](https://elaraproject.org/). Enter a differential equation and Infinitum will numerically solve it for you! Source code is available on our [Codeberg repository](https://codeberg.org/elaraproject/elara-symbolic-ui/)
+
+:warning: Be aware that the app currently only supports y(x) as the dependent variable. Also, the app is _highly experimental_, so if you encounter bugs please [report them to us](https://codeberg.org/elaraproject/elara-symbolic-ui/issues)!
 """)
 
 default_ode = r"\frac{dy}{dx} = y(1 - y)"
