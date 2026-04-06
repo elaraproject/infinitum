@@ -7,7 +7,7 @@ authors = [
 	{name = "Jacky Song",email = "jacky.song.elara@gmail.com"},
     {name = "David Yang",email = "yangd12@rpi.edu"}
 ]
-license = {text = "mit"}
+license = "MIT"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
