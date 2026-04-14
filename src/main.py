@@ -4,7 +4,7 @@ from sympy import Derivative, Symbol, Function, Mul
 from sympy.core.function import AppliedUndef # Crucial for finding mistaken function calls
 from elara_symbolic.calculate import *
 from st_mathlive import mathfield
-from pandas import DataFrame as df
+import polars as pl
 
 st.toast("App loading...", icon="ℹ", duration="short")
 
@@ -116,10 +116,11 @@ def process_input_and_graph(upperRange: int, lowerRange: int, stepSize: int, Tex
                 # is used here to prevent the UI elements
                 # from being displayed until the dataframe
                 # is successfully populated
-                plotDF = df(de_sols['y'], de_sols['t'])
+                plotDF = pl.DataFrame({"x": de_sols['t'], "y": de_sols['y']})
+                print(plotDF.head(5))
                 st.success("Solve successful! Plotting solution...")
                 st.write(rf"**Numerical solution to** ${Tex}$")
-                st.line_chart(data=plotDF)
+                st.line_chart(data=plotDF, x='x', y='y')
             else:
                 #this converts our sympy back into latex so it can be displayed again to the human eye so
                 #accuracy can be confirmed
