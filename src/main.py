@@ -6,6 +6,8 @@ from elara_symbolic.calculate import *
 from st_mathlive import mathfield
 from pandas import DataFrame as df
 
+st.toast("App loading...", icon="ℹ", duration="short")
+
 # function for processing the mathlive user input into text that can be process by sympy
 def process_raw_text(Tex: str):
     # we need this here because the mathfield often processes a simple d as this differentialD
@@ -91,22 +93,53 @@ def process_input_and_graph(upperRange: int, lowerRange: int, stepSize: int, Tex
     if upperRange <= lowerRange:
         st.write("Unable to display equation: lower bound is greater than or equal to upper bound.")
     else:
-        try:
-            de_sols = solve_differential_equation(upperRange, lowerRange, stepSize, Tex, constantValues, Y0)
-            if de_sols is not None:
-                # create a dataframe containing the date and time and plot that dataframe
-                plotDF = df(de_sols['y'], de_sols['t']) 
+        # Warn user; since it does actually take a while to solve
+        # and we don't want the user to think nothing is happening
+        st.toast("Solving might be slow and take a while",
+	                 icon="ℹ",
+                 duration="short")
+        with st.spinner("Solving in progress...", show_time=True) as status:
+            solve_complete = False
+            de_sols = None
+            # Crude way of blocking execution of further code
+            # while the differential equation is solved
+            while not solve_complete:
+                try:
+                    de_sols = solve_differential_equation(upperRange, lowerRange, stepSize, Tex, constantValues, Y0)
+                except ValueError as e:
+                    st.error(f"Solve unsuccessful: {str(e)}")
+                solve_complete = True
+            if de_sols:
+                #create a dataframe containing the date and time and plot that dataframe
+                # this dataframe can be pretty slow to
+                # initialize though, so this
+                # is used here to prevent the UI elements
+                # from being displayed until the dataframe
+                # is successfully populated
+                plotDF = df(de_sols['y'], de_sols['t'])
+                st.success("Solve successful! Plotting solution...")
+                st.write(rf"**Numerical solution to** ${Tex}$")
                 st.line_chart(data=plotDF)
             else:
+                #this converts our sympy back into latex so it can be displayed again to the human eye so
+                #accuracy can be confirmed
                 st.write("Invalid differential equation: ")
                 st.latex(Tex)
                 st.write("please enter a valid differential equation")
-        except Exception as e:
-            st.error(f"Error solving equation: {e}")
+    # pause further execution until the user
+    # inputs another differential equation
+    if st.button("Solve another differential equation"):
+        st.rerun()
+    else:
+        st.stop()
 
 st.write("""
+# Infinitum
 # Elara-symbolic UI
 
+An interactive differential equations solver, developed by [Project Elara](https://elaraproject.org/). Enter a differential equation and Infinitum will numerically solve it for you! Source code is available on our [Codeberg repository](https://codeberg.org/elaraproject/elara-symbolic-ui/)
+
+:warning: Be aware that the app currently only supports y(x) as the dependent variable. Also, the app is _highly experimental_, so if you encounter bugs please [report them to us](https://codeberg.org/elaraproject/elara-symbolic-ui/issues)!
 Currently being developed...
 """)
 
@@ -117,6 +150,7 @@ Tex = process_raw_text(Tex) # Make sure to actually call your processing functio
 # code for selecting what will be a constant and setting the value of said constant
 selected_constants = st.multiselect(label="Enter List of Constants", options=list('abcdefghijklmnopqrstuvwxyz'))
 constant_values = {i : 0.0 for i in selected_constants}
+if type(constant_values) == None: constant_values = {}
 for letter in selected_constants:
     constant_values[letter] = st.number_input(label=f"enter constant value for {letter}: ", value=0.0)
 
