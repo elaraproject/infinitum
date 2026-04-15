@@ -146,6 +146,9 @@ Currently being developed...
 
 # Code for preliminary processing of the LaTeX
 Tex, _ = mathfield(title="Enter Equations Here", value=r"\frac{dy}{dx} = y(1 - y)", mathml_preview=True, upright=False)
+# Pause execution if equation is not yet parsed
+if not Tex:
+    st.stop()
 Tex = process_raw_text(Tex) # Make sure to actually call your processing function!
 
 # code for selecting what will be a constant and setting the value of said constant
