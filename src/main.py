@@ -6,7 +6,9 @@ from elara_symbolic.calculate import *
 from st_mathlive import mathfield
 import polars as pl
 
-st.toast("App loading...", icon="ℹ", duration="short")
+if "app_loaded" not in st.session_state:
+    st.toast("App loading...", icon="ℹ", duration=2)
+    st.session_state["app_loaded"] = True
 
 # function for processing the mathlive user input into text that can be process by sympy
 def process_raw_text(Tex: str):
@@ -143,6 +145,10 @@ An interactive differential equations solver, developed by [Project Elara](https
 :warning: Be aware that the app currently only supports y(x) as the dependent variable. Also, the app is _highly experimental_, so if you encounter bugs please [report them to us](https://codeberg.org/elaraproject/elara-symbolic-ui/issues)!
 Currently being developed...
 """)
+
+# Default ODE is the logistic equation
+default_ode = r"\frac{dy}{dx} = y(1 - y)"
+Tex = default_ode
 
 # Code for preliminary processing of the LaTeX
 Tex, _ = mathfield(title="Enter Equations Here", value=r"\frac{dy}{dx} = y(1 - y)", mathml_preview=True, upright=False)
