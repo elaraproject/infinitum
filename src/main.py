@@ -6,7 +6,9 @@ from elara_symbolic.calculate import *
 from st_mathlive import mathfield
 import polars as pl
 
-st.toast("App loading...", icon="ℹ", duration="short")
+if "app_loaded" not in st.session_state:
+    st.toast("App loading...", icon="ℹ", duration=2)
+    st.session_state["app_loaded"] = True
 
 # function for processing the mathlive user input into text that can be process by sympy
 def process_raw_text(Tex: str):
@@ -136,16 +138,21 @@ def process_input_and_graph(upperRange: int, lowerRange: int, stepSize: int, Tex
 
 st.write("""
 # Infinitum
-# Elara-symbolic UI
 
 An interactive differential equations solver, developed by [Project Elara](https://elaraproject.org/). Enter a differential equation and Infinitum will numerically solve it for you! Source code is available on our [Codeberg repository](https://codeberg.org/elaraproject/elara-symbolic-ui/)
 
-:warning: Be aware that the app currently only supports y(x) as the dependent variable. Also, the app is _highly experimental_, so if you encounter bugs please [report them to us](https://codeberg.org/elaraproject/elara-symbolic-ui/issues)!
-Currently being developed...
+:warning: Be aware that the app currently only supports first-order ODEs with $y(x)$ as the dependent variable, and it currently [does not work on Firefox](https://codeberg.org/elaraproject/elara-symbolic-ui/issues/31). Also, the app is _highly experimental_, so if you encounter bugs please [report them to us](https://codeberg.org/elaraproject/elara-symbolic-ui/issues)!
 """)
+
+# Default ODE is the logistic equation
+default_ode = r"\frac{dy}{dx} = y(1 - y)"
+Tex = default_ode
 
 # Code for preliminary processing of the LaTeX
 Tex, _ = mathfield(title="Enter Equations Here", value=r"\frac{dy}{dx} = y(1 - y)", mathml_preview=True, upright=False)
+# Pause execution if equation is not yet parsed
+if not Tex:
+    st.stop()
 Tex = process_raw_text(Tex) # Make sure to actually call your processing function!
 
 # code for selecting what will be a constant and setting the value of said constant
