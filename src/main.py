@@ -2,7 +2,7 @@ import streamlit as st
 from sympy.parsing.latex import parse_latex
 from sympy import Derivative, Symbol, Function, Mul
 from sympy.core.function import AppliedUndef # Crucial for finding mistaken function calls
-from elara_symbolic.calculate import *
+from elara_symbolic.cas import solve_ode
 from st_mathlive import mathfield
 import polars as pl
 
@@ -80,10 +80,7 @@ def solve_differential_equation(upperRange: int, lowerRange: int, stepSize: int,
     # substitute parsed constants
     expr = expr.subs(parseConstants)
     
-    # define a dummy constant for solving the differential equation
-    k = Symbol("k", constant=True, real=True)
-    
-    constantPass = [(parseConstants[i], constantValues[i]) for i in constantValues.keys()] if len(constantValues) > 0 else [(k, 1.0)]
+    constantPass = [(parseConstants[i], constantValues[i]) for i in constantValues.keys()]
     
     # solve the differential equation itself
     de_sols = solve_ode(expr, dep_func, y0=Y0, t_span=(lowerRange, upperRange), constants=constantPass, step_size=stepSize)
@@ -118,7 +115,7 @@ def process_input_and_graph(upperRange: int, lowerRange: int, stepSize: int, Tex
                 # is used here to prevent the UI elements
                 # from being displayed until the dataframe
                 # is successfully populated
-                plotDF = pl.DataFrame({"x": de_sols['t'], "y": de_sols['y']})
+                plotDF = pl.DataFrame({"x": de_sols['t'], "y": de_sols['x'].reshape(-1)})
                 print(plotDF.head(5))
                 st.success("Solve successful! Plotting solution...")
                 st.write(rf"**Numerical solution to** ${Tex}$")
@@ -148,12 +145,21 @@ An interactive differential equations solver, developed by [Project Elara](https
 default_ode = r"\frac{dy}{dx} = y(1 - y)"
 Tex = default_ode
 
+equation_to_load = st.session_state["diffeq"] if "diffeq" \
+                    in st.session_state else default_ode
+
 # Code for preliminary processing of the LaTeX
-Tex, _ = mathfield(title="Enter Equations Here", value=r"\frac{dy}{dx} = y(1 - y)", mathml_preview=True, upright=False)
+Tex, _ = mathfield(title="Enter Equations Here",
+        value=equation_to_load, 
+        mathml_preview=True, upright=False)
 # Pause execution if equation is not yet parsed
 if not Tex:
     st.stop()
 Tex = process_raw_text(Tex) # Make sure to actually call your processing function!
+
+# Remember the user's last solved differential
+# equation and load it
+st.session_state["diffeq"] = Tex
 
 # code for selecting what will be a constant and setting the value of said constant
 selected_constants = st.multiselect(label="Enter List of Constants", options=list('abcdefghijklmnopqrstuvwxyz'))
@@ -163,9 +169,9 @@ for letter in selected_constants:
     constant_values[letter] = st.number_input(label=f"enter constant value for {letter}: ", value=0.0)
 
 # This is the code for the components letting the user set the bounds of the graph
-lowerRange = st.number_input(label="Enter Lower Number Bound: ", value=0.0)
-upperRange = st.number_input(label="Enter Upper Number Bound: ", value=1.0)
-stepSize = st.number_input(label="Enter Step Interval: ", value=0.01)
-Y0 = st.number_input(label="Enter Y0 of the Differential Equation: ", value=0.5) # Set the initial condition
+lowerRange = st.number_input(label="Enter Lower Number Bound (initial x): ", value=0.0)
+upperRange = st.number_input(label="Enter Upper Number Bound (final x): ", value=5.0)
+stepSize = st.number_input(label="Enter Step Interval: ", value=0.001)
+Y0 = st.number_input(label="Enter Y0 of the Differential Equation: ", value=0.5, step=1E-4) # Set the initial condition
 
 st.button(label="Solve Differential Equation", on_click=lambda: process_input_and_graph(upperRange, lowerRange, stepSize, Tex, constant_values, Y0))

@@ -15,7 +15,8 @@ dependencies = [
     "streamlit-mathlive (>=0.0.3,<0.0.4)",
     "antlr4-python3-runtime (==4.11.0)",
     "sympy (==1.14.0)",
-    "elara-symbolic @ git+https://codeberg.org/elaraproject/elara-symbolic"
+    "elara-symbolic @ git+https://codeberg.org/elaraproject/elara-symbolic@76be147c5c",
+    "polars (>=1.39.3,<2.0.0)"
 ]
 
 [build-system]
