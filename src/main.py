@@ -2,7 +2,7 @@ import streamlit as st
 from sympy.parsing.latex import parse_latex
 from sympy import Derivative, Symbol, Function, Mul
 from sympy.core.function import AppliedUndef # Crucial for finding mistaken function calls
-from elara_symbolic.calculate import *
+from elara_symbolic.cas import solve_ode
 from st_mathlive import mathfield
 import polars as pl
 
@@ -80,10 +80,7 @@ def solve_differential_equation(upperRange: int, lowerRange: int, stepSize: int,
     # substitute parsed constants
     expr = expr.subs(parseConstants)
     
-    # define a dummy constant for solving the differential equation
-    k = Symbol("k", constant=True, real=True)
-    
-    constantPass = [(parseConstants[i], constantValues[i]) for i in constantValues.keys()] if len(constantValues) > 0 else [(k, 1.0)]
+    constantPass = [(parseConstants[i], constantValues[i]) for i in constantValues.keys()]
     
     # solve the differential equation itself
     de_sols = solve_ode(expr, dep_func, y0=Y0, t_span=(lowerRange, upperRange), constants=constantPass, step_size=stepSize)
@@ -118,7 +115,7 @@ def process_input_and_graph(upperRange: int, lowerRange: int, stepSize: int, Tex
                 # is used here to prevent the UI elements
                 # from being displayed until the dataframe
                 # is successfully populated
-                plotDF = pl.DataFrame({"x": de_sols['t'], "y": de_sols['y']})
+                plotDF = pl.DataFrame({"x": de_sols['t'], "y": de_sols['x'].reshape(-1)})
                 print(plotDF.head(5))
                 st.success("Solve successful! Plotting solution...")
                 st.write(rf"**Numerical solution to** ${Tex}$")
