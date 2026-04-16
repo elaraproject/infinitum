@@ -145,12 +145,21 @@ An interactive differential equations solver, developed by [Project Elara](https
 default_ode = r"\frac{dy}{dx} = y(1 - y)"
 Tex = default_ode
 
+equation_to_load = st.session_state["diffeq"] if "diffeq" \
+                    in st.session_state else default_ode
+
 # Code for preliminary processing of the LaTeX
-Tex, _ = mathfield(title="Enter Equations Here", value=r"\frac{dy}{dx} = y(1 - y)", mathml_preview=True, upright=False)
+Tex, _ = mathfield(title="Enter Equations Here",
+        value=equation_to_load, 
+        mathml_preview=True, upright=False)
 # Pause execution if equation is not yet parsed
 if not Tex:
     st.stop()
 Tex = process_raw_text(Tex) # Make sure to actually call your processing function!
+
+# Remember the user's last solved differential
+# equation and load it
+st.session_state["diffeq"] = Tex
 
 # code for selecting what will be a constant and setting the value of said constant
 selected_constants = st.multiselect(label="Enter List of Constants", options=list('abcdefghijklmnopqrstuvwxyz'))
