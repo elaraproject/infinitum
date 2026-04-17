@@ -38,7 +38,7 @@ def fix_implicit_multiplication(node):
             return Symbol(func_name) * Mul(*args)
     return node
 
-def solve_differential_equation(upperRange: int, lowerRange: int, stepSize: int, Tex: str, constantValues: dict, Y0: float):
+def solve_differential_equation(upperRange: int, lowerRange: int, stepSize: int, Tex: str, constantValues: dict, Y0: float, leapfrog: bool):
     # parse the LaTeX provided by the user into a differential equation
     expr = parse_latex(Tex, strict=False)
     
@@ -83,12 +83,17 @@ def solve_differential_equation(upperRange: int, lowerRange: int, stepSize: int,
     constantPass = [(parseConstants[i], constantValues[i]) for i in constantValues.keys()]
     
     # solve the differential equation itself
-    de_sols = solve_ode(expr, dep_func, y0=Y0, t_span=(lowerRange, upperRange), constants=constantPass, step_size=stepSize)
+    #This implements one algorithm for solving differential equations
+    if not leapfrog:
+        de_sols = solve_ode(expr, dep_func, y0=Y0, t_span=(lowerRange, upperRange), constants=constantPass, step_size=stepSize)
+    #This implements a different algorithm, the leapfrog algorithm
+    elif leapfrog:
+        leapfrog(expr, y0=Y0, v0=None, t_span=(lowerRange, upperRange), fun_args=constantPass, step_size=stepSize, progress_bar=False, show_time_exec=False)
 
     return de_sols
 
 # takes the equation, and the bounds and produces a graph from it
-def process_input_and_graph(upperRange: int, lowerRange: int, stepSize: int, Tex: str, constantValues: dict, Y0: float):
+def process_input_and_graph(upperRange: int, lowerRange: int, stepSize: int, Tex: str, constantValues: dict, Y0: float, leapfrog: bool):
     if upperRange <= lowerRange:
         st.write("Unable to display equation: lower bound is greater than or equal to upper bound.")
     else:
@@ -104,7 +109,7 @@ def process_input_and_graph(upperRange: int, lowerRange: int, stepSize: int, Tex
             # while the differential equation is solved
             while not solve_complete:
                 try:
-                    de_sols = solve_differential_equation(upperRange, lowerRange, stepSize, Tex, constantValues, Y0)
+                    de_sols = solve_differential_equation(upperRange, lowerRange, stepSize, Tex, constantValues, Y0, leapfrog)
                 except ValueError as e:
                     st.error(f"Solve unsuccessful: {str(e)}")
                 solve_complete = True
@@ -173,5 +178,6 @@ lowerRange = st.number_input(label="Enter Lower Number Bound (initial x): ", val
 upperRange = st.number_input(label="Enter Upper Number Bound (final x): ", value=5.0)
 stepSize = st.number_input(label="Enter Step Interval: ", format="%.3f", value=0.001, step=1E-3)
 Y0 = st.number_input(label="Enter Y0 of the Differential Equation: ", format="%.2f", value=0.50) # Set the initial condition
+selected_constants = st.selectbox(label="Enter The Function You Wish To Use Here:", options=["Leapfrog", "Base"])
 
 st.button(label="Solve Differential Equation", on_click=lambda: process_input_and_graph(upperRange, lowerRange, stepSize, Tex, constant_values, Y0))
