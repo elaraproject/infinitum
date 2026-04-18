@@ -171,7 +171,7 @@ for letter in selected_constants:
 # This is the code for the components letting the user set the bounds of the graph
 lowerRange = st.number_input(label="Enter Lower Number Bound (initial x): ", value=0.0)
 upperRange = st.number_input(label="Enter Upper Number Bound (final x): ", value=5.0)
-stepSize = st.number_input(label="Enter Step Interval: ", value=0.001)
-Y0 = st.number_input(label="Enter Y0 of the Differential Equation: ", value=0.5, step=1E-4) # Set the initial condition
+stepSize = st.number_input(label="Enter Step Interval: ", format="%.3f", value=0.001, step=1E-3)
+Y0 = st.number_input(label="Enter Y0 of the Differential Equation: ", format="%.2f", value=0.50) # Set the initial condition
 
 st.button(label="Solve Differential Equation", on_click=lambda: process_input_and_graph(upperRange, lowerRange, stepSize, Tex, constant_values, Y0))
