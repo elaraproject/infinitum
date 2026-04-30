@@ -2,22 +2,21 @@ import streamlit as st
 from sympy.parsing.latex import parse_latex
 from sympy import Derivative, Symbol, Function, Mul, lambdify
 from sympy.core.function import AppliedUndef # Crucial for finding mistaken function calls
-from elara_symbolic.cas import solve_ode
+from elara_symbolic.calculate import *
 from st_mathlive import mathfield
 import polars as pl
 from PIL import Image
+import re
 
 #Load in the image from our library
 icon = Image.open(r'src/favicon-144x144.png')
 #This gives the page a title and icon in the browser so it is more identifiable
 st.set_page_config(page_title="Infinitum", page_icon=icon)
 
-if "app_loaded" not in st.session_state:
-    st.toast("App loading...", icon="ℹ", duration=2)
-    st.session_state["app_loaded"] = True
+st.toast("App loading...", icon="ℹ", duration="short")
 
-# function for processing the mathlive user input into text that can be process by sympy
 def process_raw_text(Tex: str):
+    print(f"RAW TEX: {Tex}")
     # we need this here because the mathfield often processes a simple d as this differentialD
     # which confuses sympy so we replace that with the simple d.
     newTex = Tex.replace(r"\differentialD", "d")
@@ -47,6 +46,8 @@ def fix_implicit_multiplication(node):
 def solve_differential_equation(upperRange: int, lowerRange: int, stepSize: int, Tex: str, constantValues: dict, Y0: float, leapfrogVal: bool):
     # parse the LaTeX provided by the user into a differential equation
     expr = parse_latex(Tex, strict=False)
+
+    return expr
     
     # create a dictionary of constants for the parsing
     parseConstants = { i : Symbol(i, constant=True, real=True) for i in constantValues.keys() }
@@ -86,7 +87,10 @@ def solve_differential_equation(upperRange: int, lowerRange: int, stepSize: int,
     # substitute parsed constants
     expr = expr.subs(parseConstants)
     
-    constantPass = [(parseConstants[i], constantValues[i]) for i in constantValues.keys()]
+    # define a dummy constant for solving the differential equation
+    k = Symbol("k", constant=True, real=True)
+    
+    constantPass = [(parseConstants[i], constantValues[i]) for i in constantValues.keys()] if len(constantValues) > 0 else [(k, 1.0)]
     
     # solve the differential equation itself
     #This implements one algorithm for solving differential equations
@@ -129,7 +133,7 @@ def process_input_and_graph(upperRange: int, lowerRange: int, stepSize: int, Tex
                 # is used here to prevent the UI elements
                 # from being displayed until the dataframe
                 # is successfully populated
-                plotDF = pl.DataFrame({"x": de_sols['t'], "y": de_sols['x'].reshape(-1)})
+                plotDF = pl.DataFrame({"x": de_sols['t'], "y": de_sols['y']})
                 print(plotDF.head(5))
                 st.success("Solve successful! Plotting solution...")
                 st.write(rf"**Numerical solution to** ${Tex}$")
@@ -147,47 +151,32 @@ def process_input_and_graph(upperRange: int, lowerRange: int, stepSize: int, Tex
     else:
         st.stop()
 
-st.write("""
-# Infinitum
-
-An interactive differential equations solver, developed by [Project Elara](https://elaraproject.org/). Enter a differential equation and Infinitum will numerically solve it for you! Source code is available on our [Codeberg repository](https://codeberg.org/elaraproject/elara-symbolic-ui/)
-
-:warning: Be aware that the app currently only supports first-order ODEs with $y(x)$ as the dependent variable, and it currently [does not work on Firefox](https://codeberg.org/elaraproject/elara-symbolic-ui/issues/31). Also, the app is _highly experimental_, so if you encounter bugs please [report them to us](https://codeberg.org/elaraproject/elara-symbolic-ui/issues)!
-""")
-
-# Default ODE is the logistic equation
-default_ode = r"\frac{dy}{dx} = y(1 - y)"
-Tex = default_ode
-
-equation_to_load = st.session_state["diffeq"] if "diffeq" \
-                    in st.session_state else default_ode
-
 # Code for preliminary processing of the LaTeX
-Tex, _ = mathfield(title="Enter Equations Here",
-        value=equation_to_load, 
-        mathml_preview=True, upright=False)
-# Pause execution if equation is not yet parsed
-if not Tex:
-    st.stop()
-Tex = process_raw_text(Tex) # Make sure to actually call your processing function!
+Tex = r"\frac{\differentialD^2y}{\differentialD x^2}+6=0"
+processed = process_raw_text(Tex)
+print(f'RAW PROCESSED: {processed}')
+ret = solve_differential_equation(1, 0, .01, processed, {}, 0, False)
+#for i in ret.args[0].args[0].args[0].args:
+#    print(i)
 
-# Remember the user's last solved differential
-# equation and load it
-st.session_state["diffeq"] = Tex
 
-# code for selecting what will be a constant and setting the value of said constant
-selected_constants = st.multiselect(label="Enter List of Constants", options=list('abcdefghijklmnopqrstuvwxyz'))
-constant_values = {i : 0.0 for i in selected_constants}
-if type(constant_values) == None: constant_values = {}
-for letter in selected_constants:
-    constant_values[letter] = st.number_input(label=f"enter constant value for {letter}: ", value=0.0)
-
-# This is the code for the components letting the user set the bounds of the graph
-<<<<<<< HEAD
-lowerRange = st.number_input(label="Enter Lower Number Bound (initial x): ", value=0.0)
-upperRange = st.number_input(label="Enter Upper Number Bound (final x): ", value=5.0)
-stepSize = st.number_input(label="Enter Step Interval: ", format="%.3f", value=0.001, step=1E-3)
-Y0 = st.number_input(label="Enter Y0 of the Differential Equation: ", format="%.2f", value=0.50) # Set the initial condition
-selected_constants = st.selectbox(label="Enter The Function You Wish To Use Here:", options=["Leapfrog", "Base"])
-
-st.button(label="Solve Differential Equation", on_click=lambda: process_input_and_graph(upperRange, lowerRange, stepSize, Tex, constant_values, Y0))
+def recurse(layer):
+    curLayer = str(layer)
+    if curLayer == "":
+        return True
+    if re.fullmatch(r"\(d\*\*\d\*y\)\/\(d[a-z]\*\*2\)", curLayer):
+        a = ret.subs(layer, Derivative(Function('y')(x),x,2))
+        if a == None:
+            print("EHHEEHEE")
+        else:
+            print(f"BEFORE: {ret} MODIFIED: {a}")
+        return True
+    for i in layer.args:
+        if recurse(i):
+            return True
+    return False
+    
+out = recurse(ret)
+print(f"OUTPUT: {out}")
+print(f"NEW RETURN: {ret}")
+print(f"DERIVATIVES: {ret.atoms(Derivative)}")
