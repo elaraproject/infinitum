@@ -5,6 +5,11 @@ from sympy.core.function import AppliedUndef # Crucial for finding mistaken func
 from elara_symbolic.calculate import *
 from st_mathlive import mathfield
 import polars as pl
+from PIL import Image
+
+icon = Image.open(r'src/favicon-144x144.png')
+#This gives the page a title and icon in the browser so it is more identifiable
+st.set_page_config(page_title="Infinitum", page_icon=icon)
 
 st.toast("App loading...", icon="ℹ", duration="short")
 
