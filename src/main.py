@@ -1,12 +1,13 @@
 import streamlit as st
 from sympy.parsing.latex import parse_latex
-from sympy import Derivative, Symbol, Function, Mul
+from sympy import Derivative, Symbol, Function, Mul, lambdify
 from sympy.core.function import AppliedUndef # Crucial for finding mistaken function calls
 from elara_symbolic.calculate import *
 from st_mathlive import mathfield
 import polars as pl
 from PIL import Image
 
+#Load in the image from our library
 icon = Image.open(r'src/favicon-144x144.png')
 #This gives the page a title and icon in the browser so it is more identifiable
 st.set_page_config(page_title="Infinitum", page_icon=icon)
@@ -41,7 +42,7 @@ def fix_implicit_multiplication(node):
             return Symbol(func_name) * Mul(*args)
     return node
 
-def solve_differential_equation(upperRange: int, lowerRange: int, stepSize: int, Tex: str, constantValues: dict, Y0: float, leapfrog: bool):
+def solve_differential_equation(upperRange: int, lowerRange: int, stepSize: int, Tex: str, constantValues: dict, Y0: float, leapfrogVal: bool):
     # parse the LaTeX provided by the user into a differential equation
     expr = parse_latex(Tex, strict=False)
     
@@ -90,11 +91,14 @@ def solve_differential_equation(upperRange: int, lowerRange: int, stepSize: int,
     
     # solve the differential equation itself
     #This implements one algorithm for solving differential equations
-    if not leapfrog:
+    if not leapfrogVal:
         de_sols = solve_ode(expr, dep_func, y0=Y0, t_span=(lowerRange, upperRange), constants=constantPass, step_size=stepSize)
-    #This implements a different algorithm, the leapfrog algorithm
-    elif leapfrog:
-        leapfrog(expr, y0=Y0, v0=None, t_span=(lowerRange, upperRange), fun_args=constantPass, step_size=stepSize, progress_bar=False, show_time_exec=False)
+    #if there is only one arg we should not use the leapfrog algorithm
+    elif len(dep_funcs) <= 1: 
+        de_sols = solve_ode(expr, dep_func, y0=Y0, t_span=(lowerRange, upperRange), constants=constantPass, step_size=stepSize)
+    #This implements a different algorithm, the leapfrog algorithm for higher order differential equations
+    elif leapfrogVal:
+        leapfrog(passFN, x0=Y0, v0=None, t_span=(lowerRange, upperRange), fun_args=constantPass, step_size=stepSize, progress_bar=False, show_time_exec=False)
 
     return de_sols
 
@@ -170,6 +174,6 @@ lowerRange = st.number_input(label="Enter Lower Number Bound: ", value=0.0)
 upperRange = st.number_input(label="Enter Upper Number Bound: ", value=1.0)
 stepSize = st.number_input(label="Enter Step Interval: ", value=0.01)
 Y0 = st.number_input(label="Enter Y0 of the Differential Equation: ", value=0.5) # Set the initial condition
-selected_constants = st.selectbox(label="Enter The Function You Wish To Use Here:", options=["Leapfrog", "Base"])
+selected_constants = st.selectbox(label="Enter The Solving Method You Wish To Use Here:", options=["Base", "Leapfrog"])
 
 st.button(label="Solve Differential Equation", on_click=lambda: process_input_and_graph(upperRange, lowerRange, stepSize, Tex, constant_values, Y0, True if selected_constants == "Leapfrog" else False))
