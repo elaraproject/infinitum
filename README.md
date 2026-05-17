@@ -96,7 +96,13 @@ streamlit run src/main.py --server.headless true
 - Create an interface capable of processing and solving differential equations input as LaTeX by users
 - Add graphs of the differential equations so that the user can visualize the equation they have input
 
-[![Donate to Project Elara link](https://opencollective.com/project-elara/donate/button.png?color=blue)](https://opencollective.com/project-elara/donate)
+## Support Project Elara
+
+If you'd like to help fund our work, you can support us on OpenCollective:
+
+<a href="https://opencollective.com/project-elara/donate" target="_blank">
+  <img src="https://opencollective.com/project-elara/donate/button@2x.png?color=blue" width="300" alt="Donate to Project Elara on OpenCollective" />
+</a>
 
 ## Contributors
 
