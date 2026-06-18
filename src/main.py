@@ -1,6 +1,6 @@
 import streamlit as st
 from sympy.parsing.latex import parse_latex
-from sympy import Derivative, Symbol, Function, Mul
+from sympy import Derivative, Symbol, Function, Mul, symbols
 from sympy.core.function import AppliedUndef # Crucial for finding mistaken function calls
 from elara_symbolic.calculate import *
 from st_mathlive import mathfield
@@ -44,16 +44,25 @@ def fix_implicit_multiplication(node):
             return Symbol(func_name) * Mul(*args)
     return node
 
-def deal_with_higher_orders(expr):
-    return expr
-
-
 def solve_differential_equation(upperRange: int, lowerRange: int, stepSize: int, Tex: str, constantValues: dict, Y0: float, leapfrogVal: bool):
     # parse the LaTeX provided by the user into a differential equation
     expr = parse_latex(Tex, strict=False)
+    secondOrder = False
+
+    def prepare_higher_order_diffeq(eq, dependent_symb, func_symbol):
+        func_symbols = f"{func_symbol}_æ"
+        symbol_string = f"{func_symbol} _ æ"
+        tup = symbols(symbol_string, cls=Function)
+        for i in range(0,len(tup)-1):
+            substitute = Function(func_symbols[i])(dependent_symb)
+            conv = Function(func_symbols[i+1])(dependent_symb)
+            print(f"EQ: {eq}, {substitute}, {conv}\n")
+            eq = eq.subs(substitute.diff(dependent_symb), conv)
+        return eq
 
     def fixHigherOrderDiffeqs(layer):
         nonlocal expr
+        nonlocal secondOrder
         curLayer = str(layer) # We make it a string so its easy to parse, the fragment of the equation we are checking
         #First exit case is if we reach the end and haven't found the target expression of a higher
         #order diffeq we exit
@@ -63,10 +72,11 @@ def solve_differential_equation(upperRange: int, lowerRange: int, stepSize: int,
         if re.fullmatch(r"\(d\*\*\d\*[a-z]\)\/\(d[a-z]\*\*\d\)", curLayer):
             #Get the function, degree, and dependent variable
             num = curLayer[4]
-            denomFuncChar = curLayer[5]
-            numFuncChar = curLayer[10]
+            denomFuncChar = curLayer[6]
+            numFuncChar = curLayer[11]
 
             expr = expr.subs(layer, Derivative(Function(denomFuncChar)(Symbol(numFuncChar)),Symbol(numFuncChar),int(num)))
+            secondOrder = True
             #let our loop know it should exit
             return True
         for i in layer.args:
@@ -77,16 +87,20 @@ def solve_differential_equation(upperRange: int, lowerRange: int, stepSize: int,
     # create a dictionary of constants for the parsing
     parseConstants = { i : Symbol(i, constant=True, real=True) for i in constantValues.keys() }
 
+    #Gotta do this before we find derivatives to find all the improperly parsed derivatives and convert them to properly parsed
+    fixHigherOrderDiffeqs(expr)
     # Find all derivatives to figure out what the dependent function is
     derivatives = expr.atoms(Derivative)
     
     # get the functions that are not straight 
     dep_funcs = {deriv.args[0] for deriv in derivatives}
-    
+ 
     dep_node = list(dep_funcs)[0]
     deriv = list(derivatives)[0]
-    print(f"DEPENDENT: {dep_node}")
-    print(f"DERIVATIVE: {deriv}")
+    #if secondOrder:
+    #    expr = prepare_higher_order_diffeq(expr, str(dep_node)[2], str(dep_node)[0])
+    print(f"EXPR: {expr}")
+
     
     # SymPy sometimes parses the derivative dependent var as a Symbol ('y'), sometimes as a Function ('y(x)')
     if isinstance(dep_node, AppliedUndef):
@@ -122,10 +136,10 @@ def solve_differential_equation(upperRange: int, lowerRange: int, stepSize: int,
     # solve the differential equation itself
     #This implements one algorithm for solving differential equations
     if not leapfrogVal:
-        de_sols = solve_ode(expr, dep_func, y0=Y0, t_span=(lowerRange, upperRange), constants=constantPass, step_size=stepSize)
+        de_sols = solve_ode(expr, dep_func, y0=Y0, v0=0, t_span=(lowerRange, upperRange), constants=constantPass, step_size=stepSize)
     #if there is only one arg we should not use the leapfrog algorithm
     elif len(dep_funcs) <= 1: 
-        de_sols = solve_ode(expr, dep_func, y0=Y0, t_span=(lowerRange, upperRange), constants=constantPass, step_size=stepSize)
+        de_sols = solve_ode(expr, dep_func, y0=Y0, v0=0, t_span=(lowerRange, upperRange), constants=constantPass, step_size=stepSize)
     #This implements a different algorithm, the leapfrog algorithm for higher order differential equations
     #elif leapfrogVal:
     #if True:
