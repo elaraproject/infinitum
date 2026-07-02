@@ -1,11 +1,13 @@
 import streamlit as st
 from sympy.parsing.latex import parse_latex
+import sympy
 from sympy import Derivative, Symbol, Function, Mul, symbols
 from sympy.core.function import AppliedUndef # Crucial for finding mistaken function calls
-from elara_symbolic.calculate import *
+from elara_symbolic.cas import *
 from st_mathlive import mathfield
 import polars as pl
 from PIL import Image
+import numpy as np
 import re
 
 #Load in the image from our library
@@ -47,58 +49,75 @@ def fix_implicit_multiplication(node):
 def solve_differential_equation(upperRange: int, lowerRange: int, stepSize: int, Tex: str, constantValues: dict, Y0: float, leapfrogVal: bool):
     # parse the LaTeX provided by the user into a differential equation
     expr = parse_latex(Tex, strict=False)
-    secondOrder = False
+    higherOrder = False
 
-    def prepare_higher_order_diffeq(eq, dependent_symb, func_symbol):
+    func_list = []
+    def solve_higher_order_diffeq(eq, dependent_symb, func_symbol):
+        nonlocal func_list
         func_symbols = f"{func_symbol}_æ"
         symbol_string = f"{func_symbol} _ æ"
-        tup = symbols(symbol_string, cls=Function)
+        tup = sympy.symbols(symbol_string, cls=sympy.Function)
         for i in range(0,len(tup)-1):
-            substitute = Function(func_symbols[i])(dependent_symb)
-            conv = Function(func_symbols[i+1])(dependent_symb)
-            print(f"EQ: {eq}, {substitute}, {conv}\n")
+            #sympy.wild? dummy?
+            substitute = sympy.Function(func_symbols[i])(dependent_symb)
+            conv = sympy.Function(func_symbols[i+1])(dependent_symb)
+            func_list.append(substitute)
             eq = eq.subs(substitute.diff(dependent_symb), conv)
+        func_list.append(conv)
+        eq = sympy.Eq(eq.lhs - eq.rhs, 0)
         return eq
+    def convert_diffeq_to_matrix(eq):
+        nonlocal func_list
+        func_list.append(eq.atoms(sympy.Derivative).pop())
+        a = np.empty((3,3))
+        print(func_list)
+        x = 0
+        for i in func_list[1::]:
+            coeffless_func = i
+            coeff = eq.lhs.coeff(i)
+            i = coeffless_func * coeff
+            dummy = sympy.Eq(-eq.rhs + i, -eq.lhs + i)
+            if coeffless_func == func_list[-1]:
+                a[x] = np.array([dummy.rhs.coeff(z)/coeff for z in func_list if coeffless_func != z])
+            else:
+                a[x] = np.array([1 if z == x+1 else 0 for z in range(0,len(func_list)-1)])
+            x += 1
+        return a
 
-    def fixHigherOrderDiffeqs(layer):
-        nonlocal expr
-        nonlocal secondOrder
-        curLayer = str(layer) # We make it a string so its easy to parse, the fragment of the equation we are checking
-        #First exit case is if we reach the end and haven't found the target expression of a higher
-        #order diffeq we exit
-        if curLayer == "": 
-            return False
-        #if we have found the target equation, then we go ahead and substitute it in
-        if re.fullmatch(r"\(d\*\*\d\*[a-z]\)\/\(d[a-z]\*\*\d\)", curLayer):
-            #Get the function, degree, and dependent variable
-            num = curLayer[4]
-            denomFuncChar = curLayer[6]
-            numFuncChar = curLayer[11]
+    # This function basically corrects a weird thing done by sympy where it improperly parses the d as constant and basically
+    # botches the parsing so this function for botched parsings and replaces them with the correct derivative
+    def replace_derivative(expr_to_fix):
+        nonlocal higherOrder
+        
+        def match_and_transform(expr_fragment):
+            nonlocal higherOrder
+            # Check if the string representation matches our target
+            s = str(expr_fragment)
+            if re.fullmatch(r"\(d\*\*\d\*[a-z]\)\/\(d[a-z]\*\*\d\)", s):
+                num = int(s[4])
+                if num > 2: higherOrder = True
+                denomFuncChar = s[6]
+                numFuncChar = s[11]
+                expr_fragment = Derivative(Function(denomFuncChar)(Symbol(numFuncChar)), Symbol(numFuncChar), num)
+            return expr_fragment
 
-            expr = expr.subs(layer, Derivative(Function(denomFuncChar)(Symbol(numFuncChar)),Symbol(numFuncChar),int(num)))
-            secondOrder = True
-            #let our loop know it should exit
-            return True
-        for i in layer.args:
-            if fixHigherOrderDiffeqs(i):
-                return True
-        return False
+        # Run our inner function which recurisvely searches for incorrect sympy atoms
+        return expr_to_fix.replace(lambda x: True, match_and_transform)
+
+    # Fix up the equations where sympy improperly parsed derivatives
+    expr = replace_derivative(expr)
 
     # create a dictionary of constants for the parsing
     parseConstants = { i : Symbol(i, constant=True, real=True) for i in constantValues.keys() }
 
-    #Gotta do this before we find derivatives to find all the improperly parsed derivatives and convert them to properly parsed
-    fixHigherOrderDiffeqs(expr)
     # Find all derivatives to figure out what the dependent function is
     derivatives = expr.atoms(Derivative)
     
     # get the functions that are not straight 
     dep_funcs = {deriv.args[0] for deriv in derivatives}
- 
     dep_node = list(dep_funcs)[0]
     deriv = list(derivatives)[0]
-    #if secondOrder:
-    #    expr = prepare_higher_order_diffeq(expr, str(dep_node)[2], str(dep_node)[0])
+
     print(f"EXPR: {expr}")
 
     
@@ -114,6 +133,12 @@ def solve_differential_equation(upperRange: int, lowerRange: int, stepSize: int,
         indep_var = v[0] if type(v).__name__ in ['tuple', 'Tuple'] else v
         # Force a proper y(x) representation for ODE solvers
         dep_func = Function(dep_func_name)(indep_var)
+    #now get the matrix for a higher order diffeq
+    if higherOrder:
+        modExpr = solve_higher_order_diffeq(expr, indep_var.name, dep_func.func.__name__,)
+        print(f"modExpr: {modExpr}")
+        higherOrderMatrix = convert_diffeq_to_matrix(modExpr)
+        print(higherOrderMatrix)
 
     # We use a while loop to handle nested multiplications like k(y(1-y)) smoothly.
     while True:
@@ -121,6 +146,7 @@ def solve_differential_equation(upperRange: int, lowerRange: int, stepSize: int,
         if new_expr == expr: # Stop when no more changes are made
             break
         expr = new_expr
+    print(f"SOLVING: {expr}, DEP_FUNC: {dep_func}")
 
     # Now convert any standalone symbols of the letter of the function to the formal function
     expr = expr.subs(Symbol(dep_func_name), dep_func)
@@ -136,14 +162,10 @@ def solve_differential_equation(upperRange: int, lowerRange: int, stepSize: int,
     # solve the differential equation itself
     #This implements one algorithm for solving differential equations
     if not leapfrogVal:
-        de_sols = solve_ode(expr, dep_func, y0=Y0, v0=0, t_span=(lowerRange, upperRange), constants=constantPass, step_size=stepSize)
+        de_sols = solve_ode(expr, dep_func, solver="trapezoidal", y0=Y0, v0=0, t_span=(lowerRange, upperRange), constants=constantPass, step_size=stepSize)
     #if there is only one arg we should not use the leapfrog algorithm
-    elif len(dep_funcs) <= 1: 
-        de_sols = solve_ode(expr, dep_func, y0=Y0, v0=0, t_span=(lowerRange, upperRange), constants=constantPass, step_size=stepSize)
-    #This implements a different algorithm, the leapfrog algorithm for higher order differential equations
-    #elif leapfrogVal:
-    #if True:
-    #    de_sols = leapfrog(expr, x0=Y0, v0=None, t_span=(lowerRange, upperRange), fun_args=constantPass, step_size=stepSize, progress_bar=False, show_time_exec=False)
+    else:
+        de_sols = solve_ode(expr, dep_func, solver="RK4", y0=Y0, v0=0, t_span=(lowerRange, upperRange), constants=constantPass, step_size=stepSize)
 
     return de_sols
 
@@ -155,7 +177,7 @@ def process_input_and_graph(upperRange: int, lowerRange: int, stepSize: int, Tex
         # Warn user; since it does actually take a while to solve
         # and we don't want the user to think nothing is happening
         st.toast("Solving might be slow and take a while",
-	                 icon="ℹ",
+                     icon="ℹ",
                  duration="short")
         with st.spinner("Solving in progress...", show_time=True) as status:
             solve_complete = False
