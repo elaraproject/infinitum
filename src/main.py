@@ -31,20 +31,14 @@ def process_raw_text(Tex: str):
 
 #this finds and fixes implicit multiplication like y(1-y) rather than converting them to function calls
 def fix_implicit_multiplication(node):
-    if isinstance(node, AppliedUndef):
-        func_name = node.func.__name__
-        args = node.args
+    func_name = node.func.__name__
+    args = node.args
             
-        # 1. Preserve the dependent variable if it's evaluated exactly at the independent variable (e.g., y(x))
-        if func_name == dep_func_name and len(args) == 1 and args[0] == indep_var:
-            return node
-            
-        # 2. Otherwise, convert the function call to multiplication (e.g., y(1-y) -> y * (1-y))
-        if len(args) == 1:
-            return Symbol(func_name) * args[0]
-        else:
-            return Symbol(func_name) * Mul(*args)
-    return node
+    # convert the function call to multiplication (e.g., y(1-y) -> y * (1-y))
+    if len(args) == 1:
+        return Symbol(func_name) * args[0]
+    else:
+        return Symbol(func_name) * Mul(*args)
 
 def solve_differential_equation(upperRange: int, lowerRange: int, stepSize: int, Tex: str, constantValues: dict, Y0: float, leapfrogVal: bool):
     # parse the LaTeX provided by the user into a differential equation
@@ -133,19 +127,22 @@ def solve_differential_equation(upperRange: int, lowerRange: int, stepSize: int,
         indep_var = v[0] if type(v).__name__ in ['tuple', 'Tuple'] else v
         # Force a proper y(x) representation for ODE solvers
         dep_func = Function(dep_func_name)(indep_var)
-    #now get the matrix for a higher order diffeq
-    if higherOrder:
-        modExpr = solve_higher_order_diffeq(expr, indep_var.name, dep_func.func.__name__,)
-        print(f"modExpr: {modExpr}")
-        higherOrderMatrix = convert_diffeq_to_matrix(modExpr)
-        print(higherOrderMatrix)
 
     # We use a while loop to handle nested multiplications like k(y(1-y)) smoothly.
+    matchPattern = lambda node: isinstance(node, AppliedUndef) and node != dep_func
     while True:
-        new_expr = expr.replace(AppliedUndef, fix_implicit_multiplication)
+        new_expr = expr.replace(matchPattern, fix_implicit_multiplication)
         if new_expr == expr: # Stop when no more changes are made
             break
         expr = new_expr
+    #now get the matrix for a higher order diffeq
+    if higherOrder:
+        modExpr = solve_higher_order_diffeq(expr, indep_var.name, dep_func.func.__name__,)
+        higherOrderMatrix = convert_diffeq_to_matrix(modExpr)
+        print(higherOrderMatrix)
+    # Replace all y without a (x) with just a y(x)
+    expr = expr.replace(Symbol(dep_func_name), dep_func)
+
     print(f"SOLVING: {expr}, DEP_FUNC: {dep_func}")
 
     # Now convert any standalone symbols of the letter of the function to the formal function
