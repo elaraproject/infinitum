@@ -35,8 +35,64 @@ def fix_implicit_multiplication(node):
 def solve_differential_equation(upperRange: int, lowerRange: int, stepSize: int, Tex: str, constantValues: dict, Y0: float, solver: str):
     # parse the LaTeX provided by the user into a differential equation
     expr = parse_latex(Tex, strict=False)
-    
-    
+    higherOrder = False
+
+    func_list = []
+    def solve_higher_order_diffeq(eq, dep_func):
+        nonlocal func_list
+        dependent_symb = dep_func.free_symbols.pop()
+        base_func_name = str(dep_func)[0]
+        order = sympy.ode_order(eq, dep_func)
+        substitution_funcs = sympy.symbols(f"{base_func_name}0:{order-1}", cls=sympy.Function)
+        substitution_funcs = [dep_func] + [f(dependent_symb) for f in substitution_funcs]
+        for i in range(0,order-1):
+            substitute = substitution_funcs[i]
+            conv = substitution_funcs[i+1]
+            func_list.append(substitute)
+            eq = eq.subs(substitute.diff(dependent_symb), conv)
+        func_list.append(conv)
+        eq = sympy.Eq(eq.lhs - eq.rhs, 0)
+        return eq
+    def convert_diffeq_to_matrix(eq):
+        nonlocal func_list
+        func_list.append(eq.atoms(sympy.Derivative).pop())
+        a = np.empty((len(func_list)-1,len(func_list)-1))
+        x = 0
+        for i in func_list[1::]:
+            coeffless_func = i
+            coeff = eq.lhs.coeff(i)
+            i = coeffless_func * coeff
+            dummy = sympy.Eq(-eq.rhs + i, -eq.lhs + i)
+            if coeffless_func == func_list[-1]:
+                a[x] = np.array([dummy.rhs.coeff(z)/coeff for z in func_list if coeffless_func != z])
+            else:
+                a[x] = np.array([1 if z == x+1 else 0 for z in range(0,len(func_list)-1)])
+            x += 1
+        return a
+
+    # This function basically corrects a weird thing done by sympy where it improperly parses the d as constant and basically
+    # botches the parsing so this function for botched parsings and replaces them with the correct derivative
+    def replace_derivative(expr_to_fix):
+        nonlocal higherOrder
+        
+        def match_and_transform(expr_fragment):
+            nonlocal higherOrder
+            # Check if the string representation matches our target
+            s = str(expr_fragment)
+            if re.fullmatch(r"\(d\*\*\d\*[a-z]\)\/\(d[a-z]\*\*\d\)", s):
+                num = int(s[4])
+                if num > 2: higherOrder = True
+                denomFuncChar = s[6]
+                numFuncChar = s[11]
+                expr_fragment = Derivative(Function(denomFuncChar)(Symbol(numFuncChar)), Symbol(numFuncChar), num)
+            return expr_fragment
+
+        # Run our inner function which recurisvely searches for incorrect sympy atoms
+        return expr_to_fix.replace(lambda x: True, match_and_transform)
+
+    # Fix up the equations where sympy improperly parsed derivatives
+    expr = replace_derivative(expr)
+
     # create a dictionary of constants for the parsing
     parseConstants = { i : Symbol(i, constant=True, real=True) for i in constantValues.keys() }
 
@@ -69,13 +125,14 @@ def solve_differential_equation(upperRange: int, lowerRange: int, stepSize: int,
         if new_expr == expr: # Stop when no more changes are made
             break
         expr = new_expr
-    #now get the matrix for a higher order diffeq
-    if higherOrder:
-        modExpr = solve_higher_order_diffeq(expr, indep_var.name, dep_func.func.__name__,)
-        higherOrderMatrix = convert_diffeq_to_matrix(modExpr)
-        print(higherOrderMatrix)
     # Replace all y without a (x) with just a y(x)
     expr = expr.replace(Symbol(dep_func_name), dep_func)
+    #now get the matrix for a higher order diffeq
+    if higherOrder:
+        modExpr = solve_higher_order_diffeq(expr, dep_func)
+        print(f"MOD EXPR: {modExpr}")
+        higherOrderMatrix = convert_diffeq_to_matrix(modExpr)
+        print(higherOrderMatrix)
 
     print(f"SOLVING: {expr}, DEP_FUNC: {dep_func}")
 
@@ -94,13 +151,13 @@ def solve_differential_equation(upperRange: int, lowerRange: int, stepSize: int,
         de_sols = solve_ode(expr, dep_func, solver="trapezoidal", y0=Y0, v0=0, t_span=(lowerRange, upperRange), constants=constantPass, step_size=stepSize)
     elif solver == "Leapfrog":
         de_sols = solve_ode(expr, dep_func, solver="leapfrog", y0=Y0, v0=0, t_span=(lowerRange, upperRange), constants=constantPass, step_size=stepSize)
-        de_sols['y'] = de_sols["v"][:, 0]
+        de_sols['y'] = de_sols["x"][:, 0]
         print("SOLVED")
     #RK4 may be specified for higher order diffeqs
     elif solver == "RK4":
         def f(t, y):
             return higherOrderMatrix @ y
-        x0 = np.array([1.0, 1.0, 1.0])
+        x0 = np.array([1.0 for _ in range(sympy.ode_order(expr, dep_func))])
         de_sols = RK4(f, x0=x0, t_span=(lowerRange, upperRange), step_size=stepSize)
         if 'v' in de_sols:
             de_sols['y'] = de_sols["x"][:, 0]
