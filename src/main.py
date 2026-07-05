@@ -1,10 +1,14 @@
 import streamlit as st
 from sympy.parsing.latex import parse_latex
-from sympy import Derivative, Symbol, Function, Mul
+import sympy
+from sympy import Derivative, Symbol, Function, Mul, symbols
 from sympy.core.function import AppliedUndef # Crucial for finding mistaken function calls
-from elara_symbolic.cas import solve_ode
+from elara_symbolic.cas import *
 from st_mathlive import mathfield
 import polars as pl
+from PIL import Image
+import numpy as np
+import re
 
 if "app_loaded" not in st.session_state:
     st.toast("App loading...", icon="ℹ", duration=2)
@@ -149,6 +153,7 @@ def solve_differential_equation(upperRange: int, lowerRange: int, stepSize: int,
     #This implements one algorithm for solving differential equations
     if solver == "Base":
         de_sols = solve_ode(expr, dep_func, solver="trapezoidal", y0=Y0, v0=0, t_span=(lowerRange, upperRange), constants=constantPass, step_size=stepSize)
+        print(de_sols)
     elif solver == "Leapfrog":
         de_sols = solve_ode(expr, dep_func, solver="leapfrog", y0=Y0, v0=0, t_span=(lowerRange, upperRange), constants=constantPass, step_size=stepSize)
         de_sols['y'] = de_sols["x"][:, 0]
@@ -186,17 +191,23 @@ def process_input_and_graph(upperRange: int, lowerRange: int, stepSize: int, Tex
                     st.error(f"Solve unsuccessful: {str(e)}")
                 solve_complete = True
             if de_sols:
+                functions = ['y']
+                for i in range(0,len(de_sols['v'][0])):
+                    newKeyName = 'dy'+str(i)
+                    de_sols[newKeyName] = de_sols['v'][:,i]
+                    functions.append(newKeyName)
+                    
                 #create a dataframe containing the date and time and plot that dataframe
                 # this dataframe can be pretty slow to
                 # initialize though, so this
                 # is used here to prevent the UI elements
                 # from being displayed until the dataframe
                 # is successfully populated
-                plotDF = pl.DataFrame({"x": de_sols['t'], "y": de_sols['x'].reshape(-1)})
+                plotDF = pl.DataFrame({"x": de_sols['t']} | {kv: de_sols[kv].reshape(-1) for kv in functions})
                 print(plotDF.head(5))
                 st.success("Solve successful! Plotting solution...")
                 st.write(rf"**Numerical solution to** ${Tex}$")
-                st.line_chart(data=plotDF, x='x', y='y')
+                st.line_chart(data=plotDF, x='x', y=functions)
             else:
                 #this converts our sympy back into latex so it can be displayed again to the human eye so
                 #accuracy can be confirmed
@@ -236,7 +247,7 @@ Tex = process_raw_text(Tex) # Make sure to actually call your processing functio
 
 # Remember the user's last solved differential
 # equation and load it
-st.session_state["diffeq"] = Tex
+#st.session_state["diffeq"] = Tex
 
 # code for selecting what will be a constant and setting the value of said constant
 selected_constants = st.multiselect(label="Enter List of Constants", options=list('abcdefghijklmnopqrstuvwxyz'))
