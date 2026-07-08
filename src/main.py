@@ -27,6 +27,10 @@ def process_raw_text(Tex: str):
 
 #this finds and fixes implicit multiplication like y(1-y) rather than converting them to function calls
 def fix_implicit_multiplication(node):
+    """
+    This function is quite simple. It is a function that takes a given unapplied def falsely parsed by sympy like y(1-y) which may be
+    parsed as a function but we assume in this code is always y*(1-y) and simply returns y*(1-y) or just node with the proper expression.
+    """
     func_name = node.func.__name__
     args = node.args
             
@@ -43,6 +47,15 @@ def solve_differential_equation(upperRange: int, lowerRange: int, stepSize: int,
 
     func_list = []
     def solve_higher_order_diffeq(eq, dep_func):
+        """
+        NOTE: Must change the name of this function it is bad.
+        This function accepts an equation and a dependent function and substitutes each derivative of the dependent function except for
+        the highest one (which stays a derivative of the substitution for the second highest function) with a substitute function for its
+        order so y0 for dy/dx, y1 for d^2 y/dx^2, etc. It accepts eq, the equation to be substituted, and dep_func which is the dependent
+        function so we know what function we are substituting. This function is useful for solving higher order diffeqs because it allows
+        us to very easily get the coefficients of each derivative and solve using the method we use to solve higher order diffeqs. This
+        returns the substituted equations and saves all the substituted equations in func_list.
+        """
         nonlocal func_list
         dependent_symb = dep_func.free_symbols.pop()
         base_func_name = str(dep_func)[0]
@@ -58,6 +71,11 @@ def solve_differential_equation(upperRange: int, lowerRange: int, stepSize: int,
         eq = sympy.Eq(eq.lhs - eq.rhs, 0)
         return eq
     def convert_diffeq_to_matrix(eq):
+        """
+        This function runs a reduction of order on an equation that has been ran through the function that substitutes derivatives for functions
+        stored in func_list. This takes the coefficients and uses them to calculate a matrix that can be passed to RK4. This is the matrix a that
+        is returned. It's a 2d numpy array of n-1 x n-1 where n is the order of the differential equation.
+        """
         nonlocal func_list
         func_list.append(eq.atoms(sympy.Derivative).pop())
         a = np.empty((len(func_list)-1,len(func_list)-1))
@@ -74,9 +92,15 @@ def solve_differential_equation(upperRange: int, lowerRange: int, stepSize: int,
             x += 1
         return a
 
-    # This function basically corrects a weird thing done by sympy where it improperly parses the d as constant and basically
-    # botches the parsing so this function for botched parsings and replaces them with the correct derivative
+
     def replace_derivative(expr_to_fix):
+        """
+            This accepts a sympy expression "expr_fragment" and then it basically parses in this expr fragment any subfragments that
+            can be identified as a falsely parsed higher order differential where sympy cannot parse with its latex parser but its parsing
+            is standardized enough we can create this function to do it for us. This function finds these recursively using that inner function.
+            It returns the correct expression rather than directly modifying the expression and inside our function to solve the differential equation it returns whether
+            the equation is a higher order differential equation though that functionality may soon be replaced.
+        """
         nonlocal higherOrder
         
         def match_and_transform(expr_fragment):
@@ -134,9 +158,7 @@ def solve_differential_equation(upperRange: int, lowerRange: int, stepSize: int,
     #now get the matrix for a higher order diffeq
     if higherOrder:
         modExpr = solve_higher_order_diffeq(expr, dep_func)
-        print(f"MOD EXPR: {modExpr}")
         higherOrderMatrix = convert_diffeq_to_matrix(modExpr)
-        print(higherOrderMatrix)
 
     print(f"SOLVING: {expr}, DEP_FUNC: {dep_func}")
 
@@ -157,7 +179,6 @@ def solve_differential_equation(upperRange: int, lowerRange: int, stepSize: int,
     elif solver == "Leapfrog":
         de_sols = solve_ode(expr, dep_func, solver="leapfrog", y0=Y0, v0=0, t_span=(lowerRange, upperRange), constants=constantPass, step_size=stepSize)
         de_sols['y'] = de_sols["x"][:, 0]
-        print("SOLVED")
     #RK4 may be specified for higher order diffeqs
     elif solver == "RK4":
         def f(t, y):
@@ -192,10 +213,11 @@ def process_input_and_graph(upperRange: int, lowerRange: int, stepSize: int, Tex
                 solve_complete = True
             if de_sols:
                 functions = ['y']
-                for i in range(0,len(de_sols['v'][0])):
-                    newKeyName = 'dy'+str(i)
-                    de_sols[newKeyName] = de_sols['v'][:,i]
-                    functions.append(newKeyName)
+                if len(de_sols) == 4:
+                    for i in range(0,len(de_sols['v'][0])):
+                        newKeyName = 'dy'+str(i)
+                        de_sols[newKeyName] = de_sols['v'][:,i]
+                        functions.append(newKeyName)
                     
                 #create a dataframe containing the date and time and plot that dataframe
                 # this dataframe can be pretty slow to
@@ -208,6 +230,7 @@ def process_input_and_graph(upperRange: int, lowerRange: int, stepSize: int, Tex
                 st.success("Solve successful! Plotting solution...")
                 st.write(rf"**Numerical solution to** ${Tex}$")
                 st.line_chart(data=plotDF, x='x', y=functions)
+                selected_functions = st.selectbox(label="Select Derivatives you wish to graph:", options=functions)
             else:
                 #this converts our sympy back into latex so it can be displayed again to the human eye so
                 #accuracy can be confirmed
