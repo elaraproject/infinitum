@@ -213,11 +213,10 @@ def process_input_and_graph(upperRange: int, lowerRange: int, stepSize: int, Tex
                 solve_complete = True
             if de_sols:
                 functions = ['y']
-                if len(de_sols) == 4:
-                    for i in range(0,len(de_sols['v'][0])):
-                        newKeyName = 'dy'+str(i)
-                        de_sols[newKeyName] = de_sols['v'][:,i]
-                        functions.append(newKeyName)
+                for i in range(0,len(de_sols['v'][0])):
+                    newKeyName = 'dy'+str(i)
+                    de_sols[newKeyName] = de_sols['v'][:,i]
+                    functions.append(newKeyName)
                     
                 #create a dataframe containing the date and time and plot that dataframe
                 # this dataframe can be pretty slow to
@@ -230,7 +229,6 @@ def process_input_and_graph(upperRange: int, lowerRange: int, stepSize: int, Tex
                 st.success("Solve successful! Plotting solution...")
                 st.write(rf"**Numerical solution to** ${Tex}$")
                 st.line_chart(data=plotDF, x='x', y=functions)
-                selected_functions = st.selectbox(label="Select Derivatives you wish to graph:", options=functions)
             else:
                 #this converts our sympy back into latex so it can be displayed again to the human eye so
                 #accuracy can be confirmed
