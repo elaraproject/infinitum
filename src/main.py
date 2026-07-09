@@ -212,11 +212,13 @@ def process_input_and_graph(upperRange: int, lowerRange: int, stepSize: int, Tex
                     st.error(f"Solve unsuccessful: {str(e)}")
                 solve_complete = True
             if de_sols:
+                st.session_state["valid_equation"] = True
                 functions = ['y']
-                for i in range(0,len(de_sols['v'][0])):
-                    newKeyName = 'dy'+str(i)
-                    de_sols[newKeyName] = de_sols['v'][:,i]
-                    functions.append(newKeyName)
+                if len(de_sols) > 2:
+                    for i in range(0,len(de_sols['v'][0])):
+                        newKeyName = 'dy'+str(i)
+                        de_sols[newKeyName] = de_sols['v'][:,i]
+                        functions.append(newKeyName)
                     
                 #create a dataframe containing the date and time and plot that dataframe
                 # this dataframe can be pretty slow to
@@ -225,63 +227,74 @@ def process_input_and_graph(upperRange: int, lowerRange: int, stepSize: int, Tex
                 # from being displayed until the dataframe
                 # is successfully populated
                 plotDF = pl.DataFrame({"x": de_sols['t']} | {kv: de_sols[kv].reshape(-1) for kv in functions})
+                st.session_state["ode_solution"] = plotDF
+                st.session_state["functions"] = functions
+                st.session_state["latex"] = Tex
                 print(plotDF.head(5))
-                st.success("Solve successful! Plotting solution...")
-                st.write(rf"**Numerical solution to** ${Tex}$")
-                st.line_chart(data=plotDF, x='x', y=functions)
             else:
                 #this converts our sympy back into latex so it can be displayed again to the human eye so
                 #accuracy can be confirmed
-                st.write("Invalid differential equation: ")
-                st.latex(Tex)
-                st.write("please enter a valid differential equation")
-    # pause further execution until the user
-    # inputs another differential equation
+                st.session_state["valid_equation"] = False
+
+if "ode_solution" in st.session_state:
+    if st.session_state["valid_equation"]:
+        st.success("Solve successful! Plotting solution...")
+        st.write(rf"**Numerical solution to** ${st.session_state["latex"]}$")
+        if len(st.session_state['functions']) > 1:
+            selected_funcs = st.multiselect("Select Derivatives You Want to Use", st.session_state["functions"], default=st.session_state["functions"][0])
+        else:
+            selected_funcs = st.session_state["functions"]
+        st.line_chart(data=st.session_state["ode_solution"], x='x', y=selected_funcs)
+    else:
+        st.write("Invalid differential equation: ")
+        st.latex(st.session_state["Tex"])
+        st.write("please enter a valid differential equation")
     if st.button("Solve another differential equation"):
+        st.session_state.clear()
         st.rerun()
     else:
         st.stop()
+else:
+    st.write("""
+    # Infinitum
 
-st.write("""
-# Infinitum
+    An interactive differential equations solver, developed by [Project Elara](https://elaraproject.org/). Enter a differential equation and Infinitum will numerically solve it for you! Source code is available on our [Codeberg repository](https://codeberg.org/elaraproject/elara-symbolic-ui/)
 
-An interactive differential equations solver, developed by [Project Elara](https://elaraproject.org/). Enter a differential equation and Infinitum will numerically solve it for you! Source code is available on our [Codeberg repository](https://codeberg.org/elaraproject/elara-symbolic-ui/)
+    :warning: Be aware that the app currently only supports first-order ODEs with $y(x)$ as the dependent variable, and it currently [does not work on Firefox](https://codeberg.org/elaraproject/elara-symbolic-ui/issues/31). Also, the app is _highly experimental_, so if you encounter bugs please [report them to us](https://codeberg.org/elaraproject/elara-symbolic-ui/issues)!
+    """)
 
-:warning: Be aware that the app currently only supports first-order ODEs with $y(x)$ as the dependent variable, and it currently [does not work on Firefox](https://codeberg.org/elaraproject/elara-symbolic-ui/issues/31). Also, the app is _highly experimental_, so if you encounter bugs please [report them to us](https://codeberg.org/elaraproject/elara-symbolic-ui/issues)!
-""")
+    # Default ODE is the logistic equation
+    default_ode = r"\frac{dy}{dx} = y(1 - y)"
+    Tex = default_ode
 
-# Default ODE is the logistic equation
-default_ode = r"\frac{dy}{dx} = y(1 - y)"
-Tex = default_ode
+    equation_to_load = st.session_state["diffeq"] if "diffeq" \
+                        in st.session_state else default_ode
 
-equation_to_load = st.session_state["diffeq"] if "diffeq" \
-                    in st.session_state else default_ode
+    # Code for preliminary processing of the LaTeX
+    Tex, _ = mathfield(title="Enter Equations Here",
+            value=equation_to_load, 
+            mathml_preview=True, upright=False)
+    # Pause execution if equation is not yet parsed
+    if not Tex:
+        st.stop()
+    Tex = process_raw_text(Tex) # Make sure to actually call your processing function!
 
-# Code for preliminary processing of the LaTeX
-Tex, _ = mathfield(title="Enter Equations Here",
-        value=equation_to_load, 
-        mathml_preview=True, upright=False)
-# Pause execution if equation is not yet parsed
-if not Tex:
-    st.stop()
-Tex = process_raw_text(Tex) # Make sure to actually call your processing function!
+    # Remember the user's last solved differential
+    # equation and load it
+    #st.session_state["diffeq"] = Tex
 
-# Remember the user's last solved differential
-# equation and load it
-#st.session_state["diffeq"] = Tex
+    # code for selecting what will be a constant and setting the value of said constant
+    selected_constants = st.multiselect(label="Enter List of Constants", options=list('abcdefghijklmnopqrstuvwxyz'))
+    constant_values = {i : 0.0 for i in selected_constants}
+    if type(constant_values) == None: constant_values = {}
+    for letter in selected_constants:
+        constant_values[letter] = st.number_input(label=f"enter constant value for {letter}: ", value=0.0)
 
-# code for selecting what will be a constant and setting the value of said constant
-selected_constants = st.multiselect(label="Enter List of Constants", options=list('abcdefghijklmnopqrstuvwxyz'))
-constant_values = {i : 0.0 for i in selected_constants}
-if type(constant_values) == None: constant_values = {}
-for letter in selected_constants:
-    constant_values[letter] = st.number_input(label=f"enter constant value for {letter}: ", value=0.0)
+    # This is the code for the components letting the user set the bounds of the graph
+    lowerRange = st.number_input(label="Enter Lower Number Bound: ", value=0.0)
+    upperRange = st.number_input(label="Enter Upper Number Bound: ", value=1.0)
+    stepSize = st.number_input(label="Enter Step Interval: ", value=0.01)
+    Y0 = st.number_input(label="Enter Y0 of the Differential Equation: ", value=0.5) # Set the initial condition
+    selected_constants = st.selectbox(label="Enter The Solving Method You Wish To Use Here:", options=["Base", "Leapfrog", "RK4"])
 
-# This is the code for the components letting the user set the bounds of the graph
-lowerRange = st.number_input(label="Enter Lower Number Bound: ", value=0.0)
-upperRange = st.number_input(label="Enter Upper Number Bound: ", value=1.0)
-stepSize = st.number_input(label="Enter Step Interval: ", value=0.01)
-Y0 = st.number_input(label="Enter Y0 of the Differential Equation: ", value=0.5) # Set the initial condition
-selected_constants = st.selectbox(label="Enter The Solving Method You Wish To Use Here:", options=["Base", "Leapfrog", "RK4"])
-
-st.button(label="Solve Differential Equation", on_click=lambda: process_input_and_graph(upperRange, lowerRange, stepSize, Tex, constant_values, Y0, selected_constants))
+    st.button(label="Solve Differential Equation", on_click=lambda: process_input_and_graph(upperRange, lowerRange, stepSize, Tex, constant_values, Y0, selected_constants))
