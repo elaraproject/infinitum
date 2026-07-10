@@ -174,16 +174,16 @@ def solve_differential_equation(upperRange: int, lowerRange: int, stepSize: int,
     de_sols = {}
     #This implements one algorithm for solving differential equations
     if solver == "Base":
-        de_sols = solve_ode(expr, dep_func, solver="trapezoidal", y0=Y0, v0=0, t_span=(lowerRange, upperRange), constants=constantPass, step_size=stepSize)
+        de_sols = solve_ode(expr, dep_func, solver="trapezoidal", y0=Y0[0], t_span=(lowerRange, upperRange), constants=constantPass, step_size=stepSize)
         print(de_sols)
     elif solver == "Leapfrog":
-        de_sols = solve_ode(expr, dep_func, solver="leapfrog", y0=Y0, v0=0, t_span=(lowerRange, upperRange), constants=constantPass, step_size=stepSize)
+        de_sols = solve_ode(expr, dep_func, solver="leapfrog", y0=Y0[0], v0=Y0[1], t_span=(lowerRange, upperRange), constants=constantPass, step_size=stepSize)
         de_sols['y'] = de_sols["x"][:, 0]
     #RK4 may be specified for higher order diffeqs
     elif solver == "RK4":
         def f(t, y):
             return higherOrderMatrix @ y
-        x0 = np.array([1.0 for _ in range(sympy.ode_order(expr, dep_func))])
+        x0 = np.array([1.0 for _ in Y0])
         de_sols = RK4(f, x0=x0, t_span=(lowerRange, upperRange), step_size=stepSize)
         if 'v' in de_sols:
             de_sols['y'] = de_sols["x"][:, 0]
@@ -191,7 +191,8 @@ def solve_differential_equation(upperRange: int, lowerRange: int, stepSize: int,
     return de_sols
 
 # takes the equation, and the bounds and produces a graph from it
-def process_input_and_graph(upperRange: int, lowerRange: int, stepSize: int, Tex: str, constantValues: dict, Y0: float, solver: str):
+def process_input_and_graph(upperRange: int, lowerRange: int, stepSize: int, Tex: str, constantValues: dict, Y0: str, solver: str):
+    Y0 = [float(i) for i in Y0.split(",")]
     if upperRange <= lowerRange:
         st.write("Unable to display equation: lower bound is greater than or equal to upper bound.")
     else:
@@ -294,7 +295,7 @@ else:
     lowerRange = st.number_input(label="Enter Lower Number Bound: ", value=0.0)
     upperRange = st.number_input(label="Enter Upper Number Bound: ", value=1.0)
     stepSize = st.number_input(label="Enter Step Interval: ", value=0.01)
-    Y0 = st.number_input(label="Enter Y0 of the Differential Equation: ", value=0.5) # Set the initial condition
+    Y0 = st.text_input(label="Enter Y0 of the Differential Equation as a Comma Separated List (e.g. 0,1,2,3...): ", value="0.5") # Set the initial condition
     selected_constants = st.selectbox(label="Enter The Solving Method You Wish To Use Here:", options=["Base", "Leapfrog", "RK4"])
 
     st.button(label="Solve Differential Equation", on_click=lambda: process_input_and_graph(upperRange, lowerRange, stepSize, Tex, constant_values, Y0, selected_constants))
