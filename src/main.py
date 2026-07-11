@@ -177,12 +177,20 @@ def solve_differential_equation(upperRange: int, lowerRange: int, stepSize: int,
         de_sols = solve_ode(expr, dep_func, solver="trapezoidal", y0=Y0[0], t_span=(lowerRange, upperRange), constants=constantPass, step_size=stepSize)
         print(de_sols)
     elif solver == "Leapfrog":
-        de_sols = solve_ode(expr, dep_func, solver="leapfrog", y0=Y0[0], v0=Y0[1], t_span=(lowerRange, upperRange), constants=constantPass, step_size=stepSize)
+        if sympy.ode_order(expr, dep_func) == 1:
+            de_sols = solve_ode(expr, dep_func, solver="leapfrog", y0=Y0[0], t_span=(lowerRange, upperRange), constants=constantPass, step_size=stepSize)
+        else:
+            de_sols = solve_ode(expr, dep_func, solver="leapfrog", y0=Y0[0], v0=Y0[1], t_span=(lowerRange, upperRange), constants=constantPass, step_size=stepSize)
         de_sols['y'] = de_sols["x"][:, 0]
     #RK4 may be specified for higher order diffeqs
     elif solver == "RK4":
-        def f(t, y):
-            return higherOrderMatrix @ y
+        if sympy.ode_order(expr, dep_func) == 1:
+            #deriv = deriv.replace(Symbol(dep_func_name), dep_func)
+            #expr = sympy.eq(deriv, (expr.lhs+expr.rhs/(expr.lhs.coeff(deriv)+expr.rhs.coeff(deriv))) - deriv)
+            f = sympy.lambdify((indep_var, dep_func), expr.rhs, modules="numpy")
+        else:
+            def f(t, y):
+                return higherOrderMatrix @ y
         x0 = np.array([1.0 for _ in Y0])
         de_sols = RK4(f, x0=x0, t_span=(lowerRange, upperRange), step_size=stepSize)
         if 'v' in de_sols:
