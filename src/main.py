@@ -14,8 +14,22 @@ if "app_loaded" not in st.session_state:
     st.toast("App loading...", icon="ℹ", duration=2)
     st.session_state["app_loaded"] = True
 
-# function for processing the mathlive user input into text that can be process by sympy
 def process_raw_text(Tex: str):
+    r"""Implements a method for processing a raw user input string
+    into a string readable by the sympy LaTeX parser.
+
+    Parameters
+    ----------
+    Tex : string
+    Accepts the user's input string to be processed
+
+    Examples
+    ---------
+    >>> Processed_tex = process_raw_text($$ \frac{\mathrm{d}y}{\mathrm{d}x}=y(1-y) $$)
+        For this input it would remove the \mathrm tags to allow the equation to be parsed by
+        sympy's equation solver.
+    
+    """
     # we need this here because the mathfield often processes a simple d as this differentialD
     # which confuses sympy so we replace that with the simple d.
     newTex = Tex.replace(r"\differentialD", "d")
@@ -40,7 +54,42 @@ def fix_implicit_multiplication(node):
     else:
         return Symbol(func_name) * Mul(*args)
 
-def solve_differential_equation(upperRange: int, lowerRange: int, stepSize: int, Tex: str, constantValues: dict, Y0: float, solver: str):
+def solve_differential_equation(upperRange: int, lowerRange: int, stepSize: float, Tex: str, constantValues: dict, Y0: float, solver: str):
+    r"""Implements a method for processing a raw user input string
+    into a string readable by the sympy LaTeX parser.
+
+    Parameters
+    ----------
+    upperRange : int
+    Upper range you want to be calculated on the graph
+
+    lowerRange : int
+    Lower range you want to be calculated on the graph, should be less than upper range
+
+    StepSize : float
+    What you want the interval of solve_ode to calculate on so for example you want the difference
+    between steps to be .01 such that it calculates the y for y=.01,.02,.03,etc.. you input .01
+
+    Tex: str
+    This is simply the LaTeX of the expression to be parsed
+
+    constantValues: dict
+    Inputs the values of constants that the user inputs so the program knows which symbols in the sympy
+    to pass to solve_ode as constants.
+
+    Y0: float
+    A list of initial conditions for each derivative so if y0 = 1 and y0' = 2 and y0'' = 3 then
+    this input is [1,2,3] but if its a first order diffeq this input is merely [y0]
+
+    solver: str
+
+    Examples
+    ---------
+    >>> Processed_tex = process_raw_text($$ \frac{\mathrm{d}y}{\mathrm{d}x}=y(1-y) $$)
+        For this input it would remove the \mathrm tags to allow the equation to be parsed by
+        sympy's equation solver.
+    
+    """
     # parse the LaTeX provided by the user into a differential equation
     expr = parse_latex(Tex, strict=False)
     higherOrder = False
