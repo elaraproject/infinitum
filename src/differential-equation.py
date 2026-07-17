@@ -1,224 +1,249 @@
-import streamlit as st
-from sympy.parsing.latex import parse_latex
-import sympy
-from sympy import Derivative, Symbol, Function, Mul, symbols
-from sympy.core.function import AppliedUndef # Crucial for finding mistaken function calls
-from elara_symbolic.cas import *
-from st_mathlive import mathfield
-import polars as pl
-from PIL import Image
-import numpy as np
 import re
 
+import numpy as np
+import sympy
+from sympy import Derivative, Function, Mul, Symbol
+from sympy.core.function import AppliedUndef
+from sympy.parsing.latex import parse_latex
+
+from elara_symbolic.cas import RK4, solve_ode
+
+
+def _process_raw_text(tex: str) -> str:
+    """Normalize raw LaTeX from the editor before SymPy parsing."""
+    normalized = tex.replace(r"\differentialD", "d")
+    if r"\mathrm{" in normalized:
+        normalized = normalized[8:-1]
+    return normalized
+
+
+def _fix_implicit_multiplication(node):
+    """Convert implicit call-like syntax y(1-y) into multiplication."""
+    func_name = node.func.__name__
+    args = node.args
+    if len(args) == 1:
+        return Symbol(func_name) * args[0]
+    return Symbol(func_name) * Mul(*args)
+
+
+def _replace_derivative(expr_to_fix):
+    """Fix malformed higher-order derivative tokens from LaTeX parsing."""
+
+    def match_and_transform(expr_fragment):
+        s = str(expr_fragment)
+        if re.fullmatch(r"\(d\*\*\d\*[a-z]\)\/\(d[a-z]\*\*\d\)", s):
+            num, denom_func_char, num_func_char = int(s[4]), s[6], s[11]
+            return Derivative(
+                Function(denom_func_char)(Symbol(num_func_char)),
+                Symbol(num_func_char),
+                num,
+            )
+        return expr_fragment
+
+    return expr_to_fix.replace(lambda x: True, match_and_transform)
+
+
+def _solve_higher_order_diffeq(eq, dep_func):
+    """Reduce a higher-order ODE to first-order system form."""
+    func_list = []
+    dependent_symb = dep_func.free_symbols.pop()
+    base_func_name = str(dep_func)[0]
+    order = sympy.ode_order(eq, dep_func)
+    substitution_funcs = sympy.symbols(
+        f"{base_func_name}0:{order - 1}",
+        cls=sympy.Function,
+    )
+    substitution_funcs = [dep_func] + [f(dependent_symb) for f in substitution_funcs]
+    for i in range(0, order - 1):
+        substitute = substitution_funcs[i]
+        conv = substitution_funcs[i + 1]
+        func_list.append(substitute)
+        eq = eq.subs(substitute.diff(dependent_symb), conv)
+    func_list.append(conv)
+    eq = sympy.Eq(eq.lhs - eq.rhs, 0)
+    return eq, func_list
+
+
+def _convert_diffeq_to_matrix(eq, func_list):
+    """Build the state matrix for reduced higher-order ODE systems."""
+    func_list.append(eq.atoms(sympy.Derivative).pop())
+    a = np.empty((len(func_list) - 1, len(func_list) - 1))
+    row = 0
+    for item in func_list[1:]:
+        coeffless_func = item
+        coeff = eq.lhs.coeff(item)
+        item = coeffless_func * coeff
+        dummy = sympy.Eq(-eq.rhs + item, -eq.lhs + item)
+        if coeffless_func == func_list[-1]:
+            a[row] = np.array(
+                [
+                    dummy.rhs.coeff(symb) / coeff
+                    for symb in func_list
+                    if coeffless_func != symb
+                ]
+            )
+        else:
+            a[row] = np.array(
+                [1 if z == row + 1 else 0 for z in range(0, len(func_list) - 1)]
+            )
+        row += 1
+    return a
+
+
 class Differential_Equation:
-    def __init__(self, strConstants, Tex):
+    """Parsed differential equation container for the UI layer."""
 
-        def process_raw_text(Tex: str):
-            r"""Implements a method for processing a raw user input string
-            into a string readable by the sympy LaTeX parser.
-
-            Parameters
-            ----------
-            Tex : string
-            Accepts the user's input string to be processed
-
-            Examples
-            ---------
-            >>> Processed_tex = process_raw_text($$ \frac{\mathrm{d}y}{\mathrm{d}x}=y(1-y) $$)
-                For this input it would remove the \mathrm tags to allow the equation to be parsed by
-                sympy's equation solver.
-            
-            """
-            # we need this here because the mathfield often processes a simple d as this differentialD
-            # which confuses sympy so we replace that with the simple d.
-            newTex = Tex.replace(r"\differentialD", "d")
-            # parse for upright equations TODO: Remove the option for upright equations
-            if (r"\mathrm{" in newTex):
-                newTex = newTex[8:-1]
-
-            return newTex
-
-        def solve_differential_equation(Tex: sympy.Eq):
-            # parse the LaTeX provided by the user into a differential equation
-            def replace_derivative(expr_to_fix):
-                """
-                    This accepts a sympy expression "expr_fragment" and then it basically parses in this expr fragment any subfragments that
-                    can be identified as a falsely parsed higher order differential where sympy cannot parse with its latex parser but its parsing
-                    is standardized enough we can create this function to do it for us. This function finds these recursively using that inner function.
-                    It returns the correct expression rather than directly modifying the expression and inside our function to solve the differential equation it returns whether
-                    the equation is a higher order differential equation though that functionality may soon be replaced.
-                """
-                
-                def match_and_transform(expr_fragment):
-                    # Check if the string representation matches our target
-                    s = str(expr_fragment)
-                    if re.fullmatch(r"\(d\*\*\d\*[a-z]\)\/\(d[a-z]\*\*\d\)", s):
-                        num, denomFuncChar, numFuncChar = int(s[4]), s[6], s[11]
-                        expr_fragment = Derivative(Function(denomFuncChar)(Symbol(numFuncChar)), Symbol(numFuncChar), num)
-                    return expr_fragment
-
-                # Run our inner function which recurisvely searches for incorrect sympy atoms
-                return expr_to_fix.replace(lambda x: True, match_and_transform)
-            #this finds and fixes implicit multiplication like y(1-y) rather than converting them to function calls
-            def fix_implicit_multiplication(node):
-                """
-                This function is quite simple. It is a function that takes a given unapplied def falsely parsed by sympy like y(1-y) which may be
-                parsed as a function but we assume in this code is always y*(1-y) and simply returns y*(1-y) or just node with the proper expression.
-                """
-                func_name = node.func.__name__
-                args = node.args
-                        
-                # convert the function call to multiplication (e.g., y(1-y) -> y * (1-y))
-                if len(args) == 1:
-                    return Symbol(func_name) * args[0]
-                else:
-                    return Symbol(func_name) * Mul(*args)
-
-            # Fix up the equations where sympy improperly parsed derivatives
-            expr = replace_derivative(expr)
-
-            # Find all derivatives to figure out what the dependent function is
-            derivatives = expr.atoms(Derivative)
-            
-            # get the functions that are not straight 
-            dep_funcs = {deriv.args[0] for deriv in derivatives}
-            
-            dep_node = list(dep_funcs)[0]
-            deriv = list(derivatives)[0]
-            
-            # SymPy sometimes parses the derivative dependent var as a Symbol ('y'), sometimes as a Function ('y(x)')
-            if isinstance(dep_node, AppliedUndef):
-                dep_func_name = dep_node.func.__name__
-                indep_var = dep_node.args[0]
-                dep_func = dep_node
-            else:
-                dep_func_name = dep_node.name
-                # Extract independent variable from derivative args (e.g., x from dy/dx)
-                v = deriv.args[1]
-                indep_var = v[0] if type(v).__name__ in ['tuple', 'Tuple'] else v
-                # Force a proper y(x) representation for ODE solvers
-                dep_func = Function(dep_func_name)(indep_var)
-
-            # We use a while loop to handle nested multiplications like k(y(1-y)) smoothly.
-            matchPattern = lambda node: isinstance(node, AppliedUndef) and node != dep_func
-            while True:
-                new_expr = expr.replace(matchPattern, fix_implicit_multiplication)
-                if new_expr == expr: # Stop when no more changes are made
-                    break
-                expr = new_expr
-            # Replace all y without a (x) with just a y(x)
-            expr = expr.replace(Symbol(dep_func_name), dep_func)
-
-            self._independent_var = indep_var
-            self._dep_func = dep_func            
-            self._expr = expr
-        
-        def process_constants(self, Constants):
-            # create a dictionary of constants for the parsing
-            parseConstants = { i : Symbol(i, constant=True, real=True) for i in Constants.keys() }
-            # substitute parsed constants
-            self._expr = self._expr.subs(parseConstants)
-            return parseConstants.values()
-
-        
-        unprocessed_sympy = process_raw_text(self.Tex)
+    def __init__(self, strConstants: dict[str, float] | None, Tex: str):
+        constants = strConstants or {}
         self._latex = Tex
-        solve_differential_equation(self, Tex)
-        self._constants = process_constants(strConstants)
-    
-    #Properties of the function that should not be modifiable parts of the class
+
+        parsed_tex = _process_raw_text(Tex)
+        expr = parse_latex(parsed_tex, strict=False)
+        expr = _replace_derivative(expr)
+
+        derivatives = expr.atoms(Derivative)
+        if not derivatives:
+            raise ValueError("No derivative was detected in the provided equation.")
+
+        dep_funcs = {deriv.args[0] for deriv in derivatives}
+        dep_node = list(dep_funcs)[0]
+        deriv = list(derivatives)[0]
+
+        if isinstance(dep_node, AppliedUndef):
+            dep_func_name = dep_node.func.__name__
+            indep_var = dep_node.args[0]
+            dep_func = dep_node
+        else:
+            dep_func_name = dep_node.name
+            v = deriv.args[1]
+            indep_var = v[0] if type(v).__name__ in ["tuple", "Tuple"] else v
+            dep_func = Function(dep_func_name)(indep_var)
+
+        match_pattern = lambda node: isinstance(node, AppliedUndef) and node != dep_func
+        while True:
+            new_expr = expr.replace(match_pattern, _fix_implicit_multiplication)
+            if new_expr == expr:
+                break
+            expr = new_expr
+
+        expr = expr.replace(Symbol(dep_func_name), dep_func)
+
+        parse_constants = {
+            name: Symbol(name, constant=True, real=True)
+            for name in constants.keys()
+        }
+
+        self._constant_symbols = parse_constants
+        self._constants = list(parse_constants.values())
+        self._independent_var = indep_var
+        self._dep_func = dep_func
+        self._expr = expr.subs(parse_constants)
+
     @property
-    def constants(self) -> list[sympy.Symbol]: #returns a list of constants present in the function
+    def constants(self) -> list[sympy.Symbol]:
         return self._constants
+
     @property
-    def latex(self) -> str: #returns the original string value of the latex
+    def latex(self) -> str:
         return self._latex
+
     @property
-    def expr(self) -> sympy.Eq: #returns the processed value of the differential equation
+    def expr(self) -> sympy.Eq:
         return self._expr
+
     @property
-    def dep_func(self) -> sympy.Function: #returns the dependent function as a sympy Function object
+    def dep_func(self) -> sympy.Function:
         return self._dep_func
+
     @property
-    def indep_var(self) -> sympy.Symbol: #returns the independent variable as a sympy Symbol
+    def indep_var(self) -> sympy.Symbol:
         return self._independent_var
+
     @property
-    def order(self) -> int: # returns differential equation orderp
+    def order(self) -> int:
         return sympy.ode_order(self.expr, self.dep_func)
-    
+
+
 class Differential_Equation_Solution:
-    def __init__(self, diffeq: Differential_Equation, upperRange: int, lowerRange: int, stepSize: float, Y0: float, solver: str):
+    """Compute numerical solution for a Differential_Equation object."""
+
+    def __init__(
+        self,
+        diffeq: Differential_Equation,
+        upperRange: int,
+        lowerRange: int,
+        stepSize: float,
+        Y0: list[float],
+        solver: str,
+        constantValues: dict[str, float] | None = None,
+    ):
         self._diffeq = diffeq
         self._range = (upperRange, lowerRange)
         self._step_size = stepSize
         self._Y0 = Y0
         self._solver = solver
 
-        def solve_higher_order_diffeq(eq, dep_func) -> tuple[Eq, list[Symbol]]:
-            """
-            NOTE: Must change the name of this function it is bad.
-            This function accepts an equation and a dependent function and substitutes each derivative of the dependent function except for
-            the highest one (which stays a derivative of the substitution for the second highest function) with a substitute function for its
-            order so y0 for dy/dx, y1 for d^2 y/dx^2, etc. It accepts eq, the equation to be substituted, and dep_func which is the dependent
-            function so we know what function we are substituting. This function is useful for solving higher order diffeqs because it allows
-            us to very easily get the coefficients of each derivative and solve using the method we use to solve higher order diffeqs. This
-            returns the substituted equations and saves all the substituted equations in func_list.
-            """
-            func_list = []
-            dependent_symb = dep_func.free_symbols.pop()
-            base_func_name = str(dep_func)[0]
-            order = sympy.ode_order(eq, dep_func)
-            substitution_funcs = sympy.symbols(f"{base_func_name}0:{order-1}", cls=sympy.Function)
-            substitution_funcs = [dep_func] + [f(dependent_symb) for f in substitution_funcs]
-            for i in range(0,order-1):
-                substitute = substitution_funcs[i]
-                conv = substitution_funcs[i+1]
-                func_list.append(substitute)
-                eq = eq.subs(substitute.diff(dependent_symb), conv)
-            func_list.append(conv)
-            eq = sympy.Eq(eq.lhs - eq.rhs, 0)
-            return tuple(eq, func_list)
-        def convert_diffeq_to_matrix(eq, func_list):
-            """
-            This function runs a reduction of order on an equation that has been ran through the function that substitutes derivatives for functions
-            stored in func_list. This takes the coefficients and uses them to calculate a matrix that can be passed to RK4. This is the matrix a that
-            is returned. It's a 2d numpy array of n-1 x n-1 where n is the order of the differential equation.
-            """
-            func_list.append(eq.atoms(sympy.Derivative).pop())
-            a = np.empty((len(func_list)-1,len(func_list)-1))
-            x = 0
-            for i in func_list[1::]:
-                coeffless_func = i
-                coeff = eq.lhs.coeff(i)
-                i = coeffless_func * coeff
-                dummy = sympy.Eq(-eq.rhs + i, -eq.lhs + i)
-                if coeffless_func == func_list[-1]:
-                    a[x] = np.array([dummy.rhs.coeff(z)/coeff for z in func_list if coeffless_func != z])
-                else:
-                    a[x] = np.array([1 if z == x+1 else 0 for z in range(0,len(func_list)-1)])
-                x += 1
-            return a
-            
+        constants = constantValues or {}
+        constant_pass = [
+            (diffeq._constant_symbols[name], constants[name])
+            for name in constants.keys()
+            if name in diffeq._constant_symbols
+        ]
+
+        expr = diffeq.expr
+        dep_func = diffeq.dep_func
+
         de_sols = {}
-        constantPass = [(parseConstants[i], constantValues[i]) for i in constantValues.keys()]
         if self._solver == "Base":
-            de_sols = solve_ode(expr, dep_func, solver="trapezoidal", y0=Y0[0], t_span=(lowerRange, upperRange), constants=constantPass, step_size=stepSize)
+            de_sols = solve_ode(
+                expr,
+                dep_func,
+                solver="trapezoidal",
+                y0=Y0[0],
+                t_span=(lowerRange, upperRange),
+                constants=constant_pass,
+                step_size=stepSize,
+            )
         elif self._solver == "leapfrog":
             if sympy.ode_order(expr, dep_func) == 1:
-                de_sols = solve_ode(expr, dep_func, solver="leapfrog", y0=Y0[0], t_span=(lowerRange, upperRange), constants=constantPass, step_size=stepSize)
+                de_sols = solve_ode(
+                    expr,
+                    dep_func,
+                    solver="leapfrog",
+                    y0=Y0[0],
+                    t_span=(lowerRange, upperRange),
+                    constants=constant_pass,
+                    step_size=stepSize,
+                )
             else:
-                de_sols = solve_ode(expr, dep_func, solver="leapfrog", y0=Y0[0], v0=Y0[1], t_span=(lowerRange, upperRange), constants=constantPass, step_size=stepSize)
-                de_sols['y'] = de_sols["x"][:, 0]
+                de_sols = solve_ode(
+                    expr,
+                    dep_func,
+                    solver="leapfrog",
+                    y0=Y0[0],
+                    v0=Y0[1],
+                    t_span=(lowerRange, upperRange),
+                    constants=constant_pass,
+                    step_size=stepSize,
+                )
+                de_sols["y"] = de_sols["x"][:, 0]
         elif solver == "RK4":
             if sympy.ode_order(expr, dep_func) == 1:
-                #deriv = deriv.replace(Symbol(dep_func_name), dep_func)
-                #expr = sympy.eq(deriv, (expr.lhs+expr.rhs/(expr.lhs.coeff(deriv)+expr.rhs.coeff(deriv))) - deriv)
-                f = sympy.lambdify((indep_var, dep_func), expr.rhs, modules="numpy")
+                f = sympy.lambdify((diffeq.indep_var, dep_func), expr.rhs, modules="numpy")
             else:
+                mod_expr, func_list = _solve_higher_order_diffeq(expr, dep_func)
+                higher_order_matrix = _convert_diffeq_to_matrix(mod_expr, func_list)
+
                 def f(t, y):
-                    return higherOrderMatrix @ y
-            x0 = np.array([1.0 for _ in Y0])
+                    return higher_order_matrix @ y
+
+            x0 = np.array([float(value) for value in Y0])
             de_sols = RK4(f, x0=x0, t_span=(lowerRange, upperRange), step_size=stepSize)
-            if 'v' in de_sols:
-                de_sols['y'] = de_sols["x"][:, 0]
+            if "v" in de_sols:
+                de_sols["y"] = de_sols["x"][:, 0]
+
         self._de_sols = de_sols
+
+    @property
+    def de_sols(self):
+        return self._de_sols

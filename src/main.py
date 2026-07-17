@@ -4,11 +4,12 @@ import sympy
 from sympy import Derivative, Symbol, Function, Mul, symbols
 from sympy.core.function import AppliedUndef # Crucial for finding mistaken function calls
 from elara_symbolic.cas import *
-from st_mathlive import mathfield
 import polars as pl
 from PIL import Image
 import numpy as np
 import re
+
+from mathquill_component import mathquill_input
 
 if "app_loaded" not in st.session_state:
     st.toast("App loading...", icon="ℹ", duration=2)
@@ -175,6 +176,8 @@ def solve_differential_equation(upperRange: int, lowerRange: int, stepSize: floa
 
     # Find all derivatives to figure out what the dependent function is
     derivatives = expr.atoms(Derivative)
+    if not derivatives:
+        raise ValueError("No derivative term was detected in the equation.")
     
     # get the functions that are not straight 
     dep_funcs = {deriv.args[0] for deriv in derivatives}
@@ -240,7 +243,7 @@ def solve_differential_equation(upperRange: int, lowerRange: int, stepSize: floa
         else:
             def f(t, y):
                 return higherOrderMatrix @ y
-        x0 = np.array([1.0 for _ in Y0])
+        x0 = np.array([float(v) for v in Y0], dtype=float)
         de_sols = RK4(f, x0=x0, t_span=(lowerRange, upperRange), step_size=stepSize)
         if 'v' in de_sols:
             de_sols['y'] = de_sols["x"][:, 0]
@@ -305,7 +308,7 @@ if "ode_solution" in st.session_state:
         st.line_chart(data=st.session_state["ode_solution"], x='x', y=selected_funcs)
     else:
         st.write("Invalid differential equation: ")
-        st.latex(st.session_state["Tex"])
+        st.latex(st.session_state.get("latex", ""))
         st.write("please enter a valid differential equation")
     if st.button("Solve another differential equation"):
         st.session_state.clear()
@@ -329,9 +332,20 @@ else:
                         in st.session_state else default_ode
 
     # Code for preliminary processing of the LaTeX
-    Tex, _ = mathfield(title="Enter Equations Here",
-            value=equation_to_load, 
-            mathml_preview=True, upright=False)
+    try:
+        Tex = mathquill_input(
+            label="Enter Equations Here",
+            value=equation_to_load,
+            key="mq_input",
+            placeholder=r"e.g. \\frac{dy}{dx} = y(1-y)",
+        )
+    except Exception:
+        # Hard fallback so equation input remains usable if the component fails.
+        Tex = st.text_input(
+            label="Enter Equations Here (LaTeX)",
+            value=equation_to_load,
+            key="mq_input_fallback",
+        )
     # Pause execution if equation is not yet parsed
     if not Tex:
         st.stop()
@@ -344,7 +358,6 @@ else:
     # code for selecting what will be a constant and setting the value of said constant
     selected_constants = st.multiselect(label="Enter List of Constants", options=list('abcdefghijklmnopqrstuvwxyz'))
     constant_values = {i : 0.0 for i in selected_constants}
-    if type(constant_values) == None: constant_values = {}
     for letter in selected_constants:
         constant_values[letter] = st.number_input(label=f"enter constant value for {letter}: ", value=0.0)
 
