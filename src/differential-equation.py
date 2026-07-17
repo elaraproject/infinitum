@@ -11,9 +11,7 @@ import numpy as np
 import re
 
 class Differential_Equation:
-    def __init__(self, Constants, Tex):
-        self._latex = Tex
-        self._constants = Constants
+    def __init__(self, strConstants, Tex):
 
         def process_raw_text(Tex: str):
             r"""Implements a method for processing a raw user input string
@@ -39,12 +37,9 @@ class Differential_Equation:
                 newTex = newTex[8:-1]
 
             return newTex
-        
-        unprocessed_sympy = process_raw_text(self.Tex)
 
         def solve_differential_equation(Tex: sympy.Eq):
             # parse the LaTeX provided by the user into a differential equation
-            func_list = []
             def replace_derivative(expr_to_fix):
                 """
                     This accepts a sympy expression "expr_fragment" and then it basically parses in this expr fragment any subfragments that
@@ -117,21 +112,113 @@ class Differential_Equation:
             self._independent_var = indep_var
             self._dep_func = dep_func            
             self._expr = expr
+        
+        def process_constants(self, Constants):
+            # create a dictionary of constants for the parsing
+            parseConstants = { i : Symbol(i, constant=True, real=True) for i in Constants.keys() }
+            # substitute parsed constants
+            self._expr = self._expr.subs(parseConstants)
+            return parseConstants.values()
+
+        
+        unprocessed_sympy = process_raw_text(self.Tex)
+        self._latex = Tex
         solve_differential_equation(self, Tex)
+        self._constants = process_constants(strConstants)
     
     #Properties of the function that should not be modifiable parts of the class
     @property
-    def constants(self):
+    def constants(self) -> list[sympy.Symbol]: #returns a list of constants present in the function
         return self._constants
     @property
-    def latex(self):
+    def latex(self) -> str: #returns the original string value of the latex
         return self._latex
     @property
-    def expr(self):
+    def expr(self) -> sympy.Eq: #returns the processed value of the differential equation
         return self._expr
     @property
-    def dep_func(self):
+    def dep_func(self) -> sympy.Function: #returns the dependent function as a sympy Function object
         return self._dep_func
     @property
-    def indep_var(self):
+    def indep_var(self) -> sympy.Symbol: #returns the independent variable as a sympy Symbol
         return self._independent_var
+    @property
+    def order(self) -> int: # returns differential equation orderp
+        return sympy.ode_order(self.expr, self.dep_func)
+    
+class Differential_Equation_Solution:
+    def __init__(self, diffeq: Differential_Equation, upperRange: int, lowerRange: int, stepSize: float, Y0: float, solver: str):
+        self._diffeq = diffeq
+        self._range = (upperRange, lowerRange)
+        self._step_size = stepSize
+        self._Y0 = Y0
+        self._solver = solver
+
+        def solve_higher_order_diffeq(eq, dep_func) -> tuple[Eq, list[Symbol]]:
+            """
+            NOTE: Must change the name of this function it is bad.
+            This function accepts an equation and a dependent function and substitutes each derivative of the dependent function except for
+            the highest one (which stays a derivative of the substitution for the second highest function) with a substitute function for its
+            order so y0 for dy/dx, y1 for d^2 y/dx^2, etc. It accepts eq, the equation to be substituted, and dep_func which is the dependent
+            function so we know what function we are substituting. This function is useful for solving higher order diffeqs because it allows
+            us to very easily get the coefficients of each derivative and solve using the method we use to solve higher order diffeqs. This
+            returns the substituted equations and saves all the substituted equations in func_list.
+            """
+            func_list = []
+            dependent_symb = dep_func.free_symbols.pop()
+            base_func_name = str(dep_func)[0]
+            order = sympy.ode_order(eq, dep_func)
+            substitution_funcs = sympy.symbols(f"{base_func_name}0:{order-1}", cls=sympy.Function)
+            substitution_funcs = [dep_func] + [f(dependent_symb) for f in substitution_funcs]
+            for i in range(0,order-1):
+                substitute = substitution_funcs[i]
+                conv = substitution_funcs[i+1]
+                func_list.append(substitute)
+                eq = eq.subs(substitute.diff(dependent_symb), conv)
+            func_list.append(conv)
+            eq = sympy.Eq(eq.lhs - eq.rhs, 0)
+            return tuple(eq, func_list)
+        def convert_diffeq_to_matrix(eq, func_list):
+            """
+            This function runs a reduction of order on an equation that has been ran through the function that substitutes derivatives for functions
+            stored in func_list. This takes the coefficients and uses them to calculate a matrix that can be passed to RK4. This is the matrix a that
+            is returned. It's a 2d numpy array of n-1 x n-1 where n is the order of the differential equation.
+            """
+            func_list.append(eq.atoms(sympy.Derivative).pop())
+            a = np.empty((len(func_list)-1,len(func_list)-1))
+            x = 0
+            for i in func_list[1::]:
+                coeffless_func = i
+                coeff = eq.lhs.coeff(i)
+                i = coeffless_func * coeff
+                dummy = sympy.Eq(-eq.rhs + i, -eq.lhs + i)
+                if coeffless_func == func_list[-1]:
+                    a[x] = np.array([dummy.rhs.coeff(z)/coeff for z in func_list if coeffless_func != z])
+                else:
+                    a[x] = np.array([1 if z == x+1 else 0 for z in range(0,len(func_list)-1)])
+                x += 1
+            return a
+            
+        de_sols = {}
+        constantPass = [(parseConstants[i], constantValues[i]) for i in constantValues.keys()]
+        if self._solver == "Base":
+            de_sols = solve_ode(expr, dep_func, solver="trapezoidal", y0=Y0[0], t_span=(lowerRange, upperRange), constants=constantPass, step_size=stepSize)
+        elif self._solver == "leapfrog":
+            if sympy.ode_order(expr, dep_func) == 1:
+                de_sols = solve_ode(expr, dep_func, solver="leapfrog", y0=Y0[0], t_span=(lowerRange, upperRange), constants=constantPass, step_size=stepSize)
+            else:
+                de_sols = solve_ode(expr, dep_func, solver="leapfrog", y0=Y0[0], v0=Y0[1], t_span=(lowerRange, upperRange), constants=constantPass, step_size=stepSize)
+                de_sols['y'] = de_sols["x"][:, 0]
+        elif solver == "RK4":
+            if sympy.ode_order(expr, dep_func) == 1:
+                #deriv = deriv.replace(Symbol(dep_func_name), dep_func)
+                #expr = sympy.eq(deriv, (expr.lhs+expr.rhs/(expr.lhs.coeff(deriv)+expr.rhs.coeff(deriv))) - deriv)
+                f = sympy.lambdify((indep_var, dep_func), expr.rhs, modules="numpy")
+            else:
+                def f(t, y):
+                    return higherOrderMatrix @ y
+            x0 = np.array([1.0 for _ in Y0])
+            de_sols = RK4(f, x0=x0, t_span=(lowerRange, upperRange), step_size=stepSize)
+            if 'v' in de_sols:
+                de_sols['y'] = de_sols["x"][:, 0]
+        self._de_sols = de_sols
