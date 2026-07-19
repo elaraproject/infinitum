@@ -71,7 +71,7 @@ def solve_differential_equation(upperRange: int, lowerRange: int, stepSize: floa
     between steps to be .01 such that it calculates the y for y=.01,.02,.03,etc.. you input .01
 
     Tex: str
-    This is simply the LaTeX of the expression to be parsed
+    This is simply the LaTeX of the expression to be parsed. Should be processed by the process_raw_latex function
 
     constantValues: dict
     Inputs the values of constants that the user inputs so the program knows which symbols in the sympy
@@ -82,12 +82,13 @@ def solve_differential_equation(upperRange: int, lowerRange: int, stepSize: floa
     this input is [1,2,3] but if its a first order diffeq this input is merely [y0]
 
     solver: str
+    Specifies which solver solve_ode should use: leapfrog, RK4, or base
 
     Examples
     ---------
-    >>> Processed_tex = process_raw_text($$ \frac{\mathrm{d}y}{\mathrm{d}x}=y(1-y) $$)
-        For this input it would remove the \mathrm tags to allow the equation to be parsed by
-        sympy's equation solver.
+    >>> answer = solve_differential_equation(0, 1, .1, [logistic equation string], [], [1], "Base")
+        Returns 10 values of the solution to the logistical equation for y0=1 between 0 and 1 at even intervals
+        using the base solver.
     
     """
     # parse the LaTeX provided by the user into a differential equation
@@ -336,6 +337,7 @@ else:
     if not Tex:
         st.stop()
     Tex = process_raw_text(Tex) # Make sure to actually call your processing function!
+    print(Tex)
 
     # Remember the user's last solved differential
     # equation and load it

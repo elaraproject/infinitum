@@ -3,9 +3,9 @@ from sympy.parsing.latex import parse_latex
 import sympy
 from sympy import Derivative, Symbol, Function, Mul, symbols
 from sympy.core.function import AppliedUndef # Crucial for finding mistaken function calls
-from elara_symbolic.cas import *
 from st_mathlive import mathfield
 import polars as pl
+from elara_symbolic.cas import *
 from PIL import Image
 import numpy as np
 import re
@@ -38,7 +38,8 @@ class Differential_Equation:
 
             return newTex
 
-        def solve_differential_equation(Tex: sympy.Eq):
+        def solve_differential_equation(self, expr: sympy.Eq):
+            print(expr)
             # parse the LaTeX provided by the user into a differential equation
             def replace_derivative(expr_to_fix):
                 """
@@ -115,16 +116,16 @@ class Differential_Equation:
         
         def process_constants(self, Constants):
             # create a dictionary of constants for the parsing
-            parseConstants = { i : Symbol(i, constant=True, real=True) for i in Constants.keys() }
+            parseConstants = { i : Symbol(i, constant=True, real=True) for i in Constants }
             # substitute parsed constants
             self._expr = self._expr.subs(parseConstants)
-            return parseConstants.values()
+            return parseConstants
 
         
-        unprocessed_sympy = process_raw_text(self.Tex)
+        unprocessed_sympy = parse_latex(process_raw_text(Tex), strict = False)
         self._latex = Tex
-        solve_differential_equation(self, Tex)
-        self._constants = process_constants(strConstants)
+        solve_differential_equation(self, unprocessed_sympy)
+        self._constants = process_constants(self, {i for i in strConstants})
     
     #Properties of the function that should not be modifiable parts of the class
     @property
@@ -147,14 +148,14 @@ class Differential_Equation:
         return sympy.ode_order(self.expr, self.dep_func)
     
 class Differential_Equation_Solution:
-    def __init__(self, diffeq: Differential_Equation, upperRange: int, lowerRange: int, stepSize: float, Y0: float, solver: str):
+    def __init__(self, diffeq: Differential_Equation, upperRange: int, lowerRange: int, stepSize: float, Y0: list[float], solver: str):
         self._diffeq = diffeq
         self._range = (upperRange, lowerRange)
         self._step_size = stepSize
         self._Y0 = Y0
         self._solver = solver
 
-        def solve_higher_order_diffeq(eq, dep_func) -> tuple[Eq, list[Symbol]]:
+        def solve_higher_order_diffeq(eq, dep_func) -> tuple[sympy.Eq, list[Symbol]]:
             """
             NOTE: Must change the name of this function it is bad.
             This function accepts an equation and a dependent function and substitutes each derivative of the dependent function except for
@@ -177,7 +178,7 @@ class Differential_Equation_Solution:
                 eq = eq.subs(substitute.diff(dependent_symb), conv)
             func_list.append(conv)
             eq = sympy.Eq(eq.lhs - eq.rhs, 0)
-            return tuple(eq, func_list)
+            return (eq, func_list)
         def convert_diffeq_to_matrix(eq, func_list):
             """
             This function runs a reduction of order on an equation that has been ran through the function that substitutes derivatives for functions
@@ -200,20 +201,21 @@ class Differential_Equation_Solution:
             return a
             
         de_sols = {}
-        constantPass = [(parseConstants[i], constantValues[i]) for i in constantValues.keys()]
+        constantPass = [(diffeq.constants[i], diffeq.constants.values()[i]) for i in diffeq.constants.keys()]
         if self._solver == "Base":
-            de_sols = solve_ode(expr, dep_func, solver="trapezoidal", y0=Y0[0], t_span=(lowerRange, upperRange), constants=constantPass, step_size=stepSize)
+            de_sols = solve_ode(diffeq.expr, diffeq.dep_func, solver="trapezoidal", y0=Y0[0], t_span=(lowerRange, upperRange), constants=constantPass, step_size=stepSize)
         elif self._solver == "leapfrog":
-            if sympy.ode_order(expr, dep_func) == 1:
-                de_sols = solve_ode(expr, dep_func, solver="leapfrog", y0=Y0[0], t_span=(lowerRange, upperRange), constants=constantPass, step_size=stepSize)
+            if sympy.ode_order(diffeq.expr, diffeq.dep_func) == 1:
+                de_sols = solve_ode(diffeq.expr, diffeq.dep_func, solver="leapfrog", y0=Y0[0], t_span=(lowerRange, upperRange), constants=constantPass, step_size=stepSize)
             else:
-                de_sols = solve_ode(expr, dep_func, solver="leapfrog", y0=Y0[0], v0=Y0[1], t_span=(lowerRange, upperRange), constants=constantPass, step_size=stepSize)
+                de_sols = solve_ode(diffeq.expr, diffeq.dep_func, solver="leapfrog", y0=Y0[0], v0=Y0[1], t_span=(lowerRange, upperRange), constants=constantPass, step_size=stepSize)
                 de_sols['y'] = de_sols["x"][:, 0]
         elif solver == "RK4":
-            if sympy.ode_order(expr, dep_func) == 1:
-                #deriv = deriv.replace(Symbol(dep_func_name), dep_func)
-                #expr = sympy.eq(deriv, (expr.lhs+expr.rhs/(expr.lhs.coeff(deriv)+expr.rhs.coeff(deriv))) - deriv)
-                f = sympy.lambdify((indep_var, dep_func), expr.rhs, modules="numpy")
+            temp = solve_higher_order_diffeq(diffeq.expr, diffeq.dep_func)
+            higherOrderMatrix = convert_diffeq_to_matrix(*temp)
+            print(higherOrderMatrix)
+            if sympy.ode_order(diffeq.expr, diffeq.dep_func) == 1:
+                f = sympy.lambdify((diffeq.indep_var, diffeq.dep_func), expr.rhs, modules="numpy")
             else:
                 def f(t, y):
                     return higherOrderMatrix @ y
@@ -222,3 +224,26 @@ class Differential_Equation_Solution:
             if 'v' in de_sols:
                 de_sols['y'] = de_sols["x"][:, 0]
         self._de_sols = de_sols
+
+        functions = ['y']
+        if len(de_sols) > 2:
+            for i in range(0,len(de_sols['v'][0])):
+                newKeyName = 'dy'+str(i)
+                de_sols[newKeyName] = de_sols['v'][:,i]
+                functions.append(newKeyName)
+                    
+        #create a dataframe containing the date and time and plot that dataframe
+        # this dataframe can be pretty slow to
+        # initialize though, so this
+        # is used here to prevent the UI elements
+        # from being displayed until the dataframe
+        # is successfully populated
+        self._plotDF = pl.DataFrame({"x": de_sols['t']} | {kv: de_sols[kv].reshape(-1) for kv in functions})
+
+    @property
+    def plotDF(self): #returns the plotDF of a the given solution
+        return self._plotDF
+
+diffeq1 = Differential_Equation("", r"\frac{d^3y}{d x^3}+\frac{d^2y}{dx^2}+\frac{d y}{d x}+y\left(x\right)=5")
+solution = Differential_Equation_Solution(diffeq1, 0, 1, .01, [1,1,1,1], "RK4")
+print(solution.plotDF)
