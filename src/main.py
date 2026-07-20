@@ -337,7 +337,7 @@ else:
             label="Enter Equations Here",
             value=equation_to_load,
             key="mq_input",
-            placeholder=r"e.g. \\frac{dy}{dx} = y(1-y)",
+            placeholder=r"\frac{dy}{dx} = y(1-y)",
         )
     except Exception:
         # Hard fallback so equation input remains usable if the component fails.
