@@ -7,6 +7,7 @@ from elara_symbolic.cas import *
 from st_mathlive import mathfield
 import polars as pl
 from PIL import Image
+from differential_equation import *
 import numpy as np
 import re
 
@@ -14,242 +15,8 @@ if "app_loaded" not in st.session_state:
     st.toast("App loading...", icon="ℹ", duration=2)
     st.session_state["app_loaded"] = True
 
-def process_raw_text(Tex: str):
-    r"""Implements a method for processing a raw user input string
-    into a string readable by the sympy LaTeX parser.
-
-    Parameters
-    ----------
-    Tex : string
-    Accepts the user's input string to be processed
-
-    Examples
-    ---------
-    >>> Processed_tex = process_raw_text($$ \frac{\mathrm{d}y}{\mathrm{d}x}=y(1-y) $$)
-        For this input it would remove the \mathrm tags to allow the equation to be parsed by
-        sympy's equation solver.
-    
-    """
-    # we need this here because the mathfield often processes a simple d as this differentialD
-    # which confuses sympy so we replace that with the simple d.
-    newTex = Tex.replace(r"\differentialD", "d")
-    # parse for upright equations TODO: Remove the option for upright equations
-    if (r"\mathrm{" in newTex):
-        newTex = newTex[8:-1]
-
-    return newTex
-
-#this finds and fixes implicit multiplication like y(1-y) rather than converting them to function calls
-def fix_implicit_multiplication(node):
-    """
-    This function is quite simple. It is a function that takes a given unapplied def falsely parsed by sympy like y(1-y) which may be
-    parsed as a function but we assume in this code is always y*(1-y) and simply returns y*(1-y) or just node with the proper expression.
-    """
-    func_name = node.func.__name__
-    args = node.args
-            
-    # convert the function call to multiplication (e.g., y(1-y) -> y * (1-y))
-    if len(args) == 1:
-        return Symbol(func_name) * args[0]
-    else:
-        return Symbol(func_name) * Mul(*args)
-
-def solve_differential_equation(upperRange: int, lowerRange: int, stepSize: float, Tex: str, constantValues: dict, Y0: float, solver: str):
-    r"""Implements a method for processing a raw user input string
-    into a string readable by the sympy LaTeX parser.
-
-    Parameters
-    ----------
-    upperRange : int
-    Upper range you want to be calculated on the graph
-
-    lowerRange : int
-    Lower range you want to be calculated on the graph, should be less than upper range
-
-    StepSize : float
-    What you want the interval of solve_ode to calculate on so for example you want the difference
-    between steps to be .01 such that it calculates the y for y=.01,.02,.03,etc.. you input .01
-
-    Tex: str
-    This is simply the LaTeX of the expression to be parsed. Should be processed by the process_raw_latex function
-
-    constantValues: dict
-    Inputs the values of constants that the user inputs so the program knows which symbols in the sympy
-    to pass to solve_ode as constants.
-
-    Y0: float
-    A list of initial conditions for each derivative so if y0 = 1 and y0' = 2 and y0'' = 3 then
-    this input is [1,2,3] but if its a first order diffeq this input is merely [y0]
-
-    solver: str
-    Specifies which solver solve_ode should use: leapfrog, RK4, or base
-
-    Examples
-    ---------
-    >>> answer = solve_differential_equation(0, 1, .1, [logistic equation string], [], [1], "Base")
-        Returns 10 values of the solution to the logistical equation for y0=1 between 0 and 1 at even intervals
-        using the base solver.
-    
-    """
-    # parse the LaTeX provided by the user into a differential equation
-    expr = parse_latex(Tex, strict=False)
-    higherOrder = False
-
-    func_list = []
-    def solve_higher_order_diffeq(eq, dep_func):
-        """
-        NOTE: Must change the name of this function it is bad.
-        This function accepts an equation and a dependent function and substitutes each derivative of the dependent function except for
-        the highest one (which stays a derivative of the substitution for the second highest function) with a substitute function for its
-        order so y0 for dy/dx, y1 for d^2 y/dx^2, etc. It accepts eq, the equation to be substituted, and dep_func which is the dependent
-        function so we know what function we are substituting. This function is useful for solving higher order diffeqs because it allows
-        us to very easily get the coefficients of each derivative and solve using the method we use to solve higher order diffeqs. This
-        returns the substituted equations and saves all the substituted equations in func_list.
-        """
-        nonlocal func_list
-        dependent_symb = dep_func.free_symbols.pop()
-        base_func_name = str(dep_func)[0]
-        order = sympy.ode_order(eq, dep_func)
-        substitution_funcs = sympy.symbols(f"{base_func_name}0:{order-1}", cls=sympy.Function)
-        substitution_funcs = [dep_func] + [f(dependent_symb) for f in substitution_funcs]
-        for i in range(0,order-1):
-            substitute = substitution_funcs[i]
-            conv = substitution_funcs[i+1]
-            func_list.append(substitute)
-            eq = eq.subs(substitute.diff(dependent_symb), conv)
-        func_list.append(conv)
-        eq = sympy.Eq(eq.lhs - eq.rhs, 0)
-        return eq
-    def convert_diffeq_to_matrix(eq):
-        """
-        This function runs a reduction of order on an equation that has been ran through the function that substitutes derivatives for functions
-        stored in func_list. This takes the coefficients and uses them to calculate a matrix that can be passed to RK4. This is the matrix a that
-        is returned. It's a 2d numpy array of n-1 x n-1 where n is the order of the differential equation.
-        """
-        nonlocal func_list
-        func_list.append(eq.atoms(sympy.Derivative).pop())
-        a = np.empty((len(func_list)-1,len(func_list)-1))
-        x = 0
-        for i in func_list[1::]:
-            coeffless_func = i
-            coeff = eq.lhs.coeff(i)
-            i = coeffless_func * coeff
-            dummy = sympy.Eq(-eq.rhs + i, -eq.lhs + i)
-            if coeffless_func == func_list[-1]:
-                a[x] = np.array([dummy.rhs.coeff(z)/coeff for z in func_list if coeffless_func != z])
-            else:
-                a[x] = np.array([1 if z == x+1 else 0 for z in range(0,len(func_list)-1)])
-            x += 1
-        return a
-
-
-    def replace_derivative(expr_to_fix):
-        """
-            This accepts a sympy expression "expr_fragment" and then it basically parses in this expr fragment any subfragments that
-            can be identified as a falsely parsed higher order differential where sympy cannot parse with its latex parser but its parsing
-            is standardized enough we can create this function to do it for us. This function finds these recursively using that inner function.
-            It returns the correct expression rather than directly modifying the expression and inside our function to solve the differential equation it returns whether
-            the equation is a higher order differential equation though that functionality may soon be replaced.
-        """
-        nonlocal higherOrder
-        
-        def match_and_transform(expr_fragment):
-            nonlocal higherOrder
-            # Check if the string representation matches our target
-            s = str(expr_fragment)
-            if re.fullmatch(r"\(d\*\*\d\*[a-z]\)\/\(d[a-z]\*\*\d\)", s):
-                num = int(s[4])
-                if num > 2: higherOrder = True
-                denomFuncChar = s[6]
-                numFuncChar = s[11]
-                expr_fragment = Derivative(Function(denomFuncChar)(Symbol(numFuncChar)), Symbol(numFuncChar), num)
-            return expr_fragment
-
-        # Run our inner function which recurisvely searches for incorrect sympy atoms
-        return expr_to_fix.replace(lambda x: True, match_and_transform)
-
-    # Fix up the equations where sympy improperly parsed derivatives
-    expr = replace_derivative(expr)
-
-    # create a dictionary of constants for the parsing
-    parseConstants = { i : Symbol(i, constant=True, real=True) for i in constantValues.keys() }
-
-    # Find all derivatives to figure out what the dependent function is
-    derivatives = expr.atoms(Derivative)
-    
-    # get the functions that are not straight 
-    dep_funcs = {deriv.args[0] for deriv in derivatives}
-    
-    dep_node = list(dep_funcs)[0]
-    deriv = list(derivatives)[0]
-    
-    # SymPy sometimes parses the derivative dependent var as a Symbol ('y'), sometimes as a Function ('y(x)')
-    if isinstance(dep_node, AppliedUndef):
-        dep_func_name = dep_node.func.__name__
-        indep_var = dep_node.args[0]
-        dep_func = dep_node
-    else:
-        dep_func_name = dep_node.name
-        # Extract independent variable from derivative args (e.g., x from dy/dx)
-        v = deriv.args[1]
-        indep_var = v[0] if type(v).__name__ in ['tuple', 'Tuple'] else v
-        # Force a proper y(x) representation for ODE solvers
-        dep_func = Function(dep_func_name)(indep_var)
-
-    # We use a while loop to handle nested multiplications like k(y(1-y)) smoothly.
-    matchPattern = lambda node: isinstance(node, AppliedUndef) and node != dep_func
-    while True:
-        new_expr = expr.replace(matchPattern, fix_implicit_multiplication)
-        if new_expr == expr: # Stop when no more changes are made
-            break
-        expr = new_expr
-    # Replace all y without a (x) with just a y(x)
-    expr = expr.replace(Symbol(dep_func_name), dep_func)
-    #now get the matrix for a higher order diffeq
-    if higherOrder:
-        modExpr = solve_higher_order_diffeq(expr, dep_func)
-        higherOrderMatrix = convert_diffeq_to_matrix(modExpr)
-
-    print(f"SOLVING: {expr}, DEP_FUNC: {dep_func}")
-
-    # Now convert any standalone symbols of the letter of the function to the formal function
-    expr = expr.subs(Symbol(dep_func_name), dep_func)
-
-    # substitute parsed constants
-    expr = expr.subs(parseConstants)
-    
-    constantPass = [(parseConstants[i], constantValues[i]) for i in constantValues.keys()]
-    
-    # solve the differential equation itself
-    de_sols = {}
-    #This implements one algorithm for solving differential equations
-    if solver == "Base":
-        de_sols = solve_ode(expr, dep_func, solver="trapezoidal", y0=Y0[0], t_span=(lowerRange, upperRange), constants=constantPass, step_size=stepSize)
-        print(de_sols)
-    elif solver == "Leapfrog":
-        if sympy.ode_order(expr, dep_func) == 1:
-            de_sols = solve_ode(expr, dep_func, solver="leapfrog", y0=Y0[0], t_span=(lowerRange, upperRange), constants=constantPass, step_size=stepSize)
-        else:
-            de_sols = solve_ode(expr, dep_func, solver="leapfrog", y0=Y0[0], v0=Y0[1], t_span=(lowerRange, upperRange), constants=constantPass, step_size=stepSize)
-        de_sols['y'] = de_sols["x"][:, 0]
-    #RK4 may be specified for higher order diffeqs
-    elif solver == "RK4":
-        if sympy.ode_order(expr, dep_func) == 1:
-            #deriv = deriv.replace(Symbol(dep_func_name), dep_func)
-            #expr = sympy.eq(deriv, (expr.lhs+expr.rhs/(expr.lhs.coeff(deriv)+expr.rhs.coeff(deriv))) - deriv)
-            f = sympy.lambdify((indep_var, dep_func), expr.rhs, modules="numpy")
-        else:
-            def f(t, y):
-                return higherOrderMatrix @ y
-        x0 = np.array([1.0 for _ in Y0])
-        de_sols = RK4(f, x0=x0, t_span=(lowerRange, upperRange), step_size=stepSize)
-        if 'v' in de_sols:
-            de_sols['y'] = de_sols["x"][:, 0]
-
-    return de_sols
-
 # takes the equation, and the bounds and produces a graph from it
-def process_input_and_graph(upperRange: int, lowerRange: int, stepSize: int, Tex: str, constantValues: dict, Y0: str, solver: str):
+def process_input_and_graph(upperRange: int, lowerRange: int, stepSize: int, Tex: str, constantValues: set, Y0: str, solver: str):
     Y0 = [float(i) for i in Y0.split(",")]
     if upperRange <= lowerRange:
         st.write("Unable to display equation: lower bound is greater than or equal to upper bound.")
@@ -266,30 +33,23 @@ def process_input_and_graph(upperRange: int, lowerRange: int, stepSize: int, Tex
             # while the differential equation is solved
             while not solve_complete:
                 try:
-                    de_sols = solve_differential_equation(upperRange, lowerRange, stepSize, Tex, constantValues, Y0, solver)
+                    diffeq = Differential_Equation(constantValues, Tex)
+                    de_sols = Differential_Equation_Solution(diffeq, upperRange, lowerRange, stepSize, Y0, solver)
                 except ValueError as e:
                     st.error(f"Solve unsuccessful: {str(e)}")
                 solve_complete = True
             if de_sols:
                 st.session_state["valid_equation"] = True
-                functions = ['y']
-                if len(de_sols) > 2:
-                    for i in range(0,len(de_sols['v'][0])):
-                        newKeyName = 'dy'+str(i)
-                        de_sols[newKeyName] = de_sols['v'][:,i]
-                        functions.append(newKeyName)
-                    
                 #create a dataframe containing the date and time and plot that dataframe
                 # this dataframe can be pretty slow to
                 # initialize though, so this
                 # is used here to prevent the UI elements
                 # from being displayed until the dataframe
                 # is successfully populated
-                plotDF = pl.DataFrame({"x": de_sols['t']} | {kv: de_sols[kv].reshape(-1) for kv in functions})
-                st.session_state["ode_solution"] = plotDF
-                st.session_state["functions"] = functions
-                st.session_state["latex"] = Tex
-                print(plotDF.head(5))
+                st.session_state["ode_solution"] = de_sols.plotDF
+                st.session_state["functions"] = de_sols.functions
+                st.session_state["latex"] = diffeq.latex
+                print(de_sols.plotDF.head(5))
             else:
                 #this converts our sympy back into latex so it can be displayed again to the human eye so
                 #accuracy can be confirmed
@@ -336,13 +96,7 @@ else:
     # Pause execution if equation is not yet parsed
     if not Tex:
         st.stop()
-    Tex = process_raw_text(Tex) # Make sure to actually call your processing function!
-    print(Tex)
-
-    # Remember the user's last solved differential
-    # equation and load it
-    #st.session_state["diffeq"] = Tex
-
+    
     # code for selecting what will be a constant and setting the value of said constant
     selected_constants = st.multiselect(label="Enter List of Constants", options=list('abcdefghijklmnopqrstuvwxyz'))
     constant_values = {i : 0.0 for i in selected_constants}
