@@ -87,7 +87,59 @@
   </div>
 
   <script type="module">
-    import { Streamlit } from "./vendor/index.js";
+    const Streamlit = {
+      API_VERSION: 1,
+      RENDER_EVENT: "streamlit:render",
+      events: new EventTarget(),
+      _lastFrameHeight: null,
+      _messageHandlerRegistered: false,
+      setComponentReady() {
+        if (!this._messageHandlerRegistered) {
+          window.addEventListener("message", this.onMessageEvent);
+          this._messageHandlerRegistered = true;
+        }
+        this.sendBackMsg("streamlit:componentReady", {
+          apiVersion: this.API_VERSION,
+        });
+      },
+      setFrameHeight(height) {
+        const nextHeight = height ?? document.body.scrollHeight;
+        if (nextHeight === this._lastFrameHeight) {
+          return;
+        }
+        this._lastFrameHeight = nextHeight;
+        this.sendBackMsg("streamlit:setFrameHeight", { height: nextHeight });
+      },
+      setComponentValue(value) {
+        this.sendBackMsg("streamlit:setComponentValue", {
+          value,
+          dataType: "json",
+        });
+      },
+      onMessageEvent(event) {
+        const data = event.data;
+        if (data?.type === Streamlit.RENDER_EVENT) {
+          const eventData = {
+            disabled: Boolean(data.disabled),
+            args: data.args ?? {},
+            theme: data.theme,
+          };
+          Streamlit.events.dispatchEvent(
+            new CustomEvent(Streamlit.RENDER_EVENT, { detail: eventData })
+          );
+        }
+      },
+      sendBackMsg(type, data) {
+        window.parent.postMessage(
+          {
+            isStreamlitMessage: true,
+            type,
+            ...data,
+          },
+          "*"
+        );
+      },
+    };
 
     let mathField = null;
     let lastValue = "";
@@ -137,14 +189,17 @@
     async function loadMathQuill() {
       const sources = [
         {
+          jquery: "https://cdn.jsdelivr.net/npm/jquery@3.7.1/dist/jquery.min.js",
           css: "./vendor/mathquill.css",
           js: "./vendor/mathquill.js",
         },
         {
+          jquery: "https://cdn.jsdelivr.net/npm/jquery@3.7.1/dist/jquery.min.js",
           css: "https://cdn.jsdelivr.net/gh/desmosinc/mathquill@master/build/mathquill.css",
           js: "https://cdn.jsdelivr.net/gh/desmosinc/mathquill@master/build/mathquill.js",
         },
         {
+          jquery: "https://cdn.jsdelivr.net/npm/jquery@3.7.1/dist/jquery.min.js",
           css: "https://cdn.jsdelivr.net/npm/mathquill@0.10.1/build/mathquill.css",
           js: "https://cdn.jsdelivr.net/npm/mathquill@0.10.1/build/mathquill.js",
         },
@@ -152,6 +207,7 @@
 
       for (const source of sources) {
         try {
+          await loadScript(source.jquery);
           await loadCss(source.css);
           await loadScript(source.js);
           if (window.MathQuill) {
