@@ -2,6 +2,8 @@
 
 This is a Desmos-like webapp that serves as a frontend to the [Elara symbolic](https://codeberg.org/elaraproject/elara-symbolic) library, allowing using the library without any coding experience. Includes facilities for computing derivatives and integrals (both symbolically and numerically) as well as solving differential equations.
 
+The equation editor now uses a custom Streamlit MathQuill component instead of the older streamlit-mathlive plugin.
+
 > Currently the app is MIT-licensed, but if all contributors are willing, we would be more than happy to turn it into public-domain licensed software.
 
 ![](app_screenshot.png)
@@ -61,6 +63,12 @@ Afterwards, you can launch the app anytime by running:
 
 ```bash
 poetry run streamlit run src/main.py
+
+To run the basic regression test for the differential-equation parser and solver, use:
+
+```bash
+python -m pytest tests/test_differential_equation.py
+```
 ```
 
 
