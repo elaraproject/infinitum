@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>MathQuill Input</title>
-  <script src="https://unpkg.com/streamlit-component-lib@2.0.0/dist/index.js"></script>
+  <link rel="stylesheet" href="./vendor/mathquill.css" />
   <style>
     :root {
       --border: rgba(49, 51, 63, 0.2);
@@ -86,7 +86,9 @@
     <div id="hint" class="hint"></div>
   </div>
 
-  <script>
+  <script type="module">
+    import { Streamlit } from "./vendor/index.js";
+
     let mathField = null;
     let lastValue = "";
     let debounceTimer = null;
@@ -134,6 +136,10 @@
 
     async function loadMathQuill() {
       const sources = [
+        {
+          css: "./vendor/mathquill.css",
+          js: "./vendor/mathquill.js",
+        },
         {
           css: "https://cdn.jsdelivr.net/gh/desmosinc/mathquill@master/build/mathquill.css",
           js: "https://cdn.jsdelivr.net/gh/desmosinc/mathquill@master/build/mathquill.js",

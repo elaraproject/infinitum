@@ -63,13 +63,15 @@ Afterwards, you can launch the app anytime by running:
 
 ```bash
 poetry run streamlit run src/main.py
+```
 
 To run the basic regression test for the differential-equation parser and solver, use:
 
 ```bash
 python -m pytest tests/test_differential_equation.py
 ```
-```
+
+The MathQuill component prefers locally vendored assets under `src/mathquill_component_frontend/vendor/` and only falls back to CDN loading if those files are unavailable.
 
 
 ### Alternative installation
