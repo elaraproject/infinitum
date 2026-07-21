@@ -1,12 +1,12 @@
 import streamlit as st
-from sympy.parsing.latex import parse_latex
 import sympy
+from sympy.parsing.latex import parse_latex
 from sympy import Derivative, Symbol, Function, Mul, symbols
 from sympy.core.function import AppliedUndef # Crucial for finding mistaken function calls
 from st_mathlive import mathfield
 import polars as pl
-from elara_symbolic.cas import *
-from PIL import Image
+from elara_symbolic.cas import solve_ode
+from elara_symbolic.numerical import RK4
 import numpy as np
 import re
 
@@ -244,6 +244,6 @@ class Differential_Equation_Solution:
     def plotDF(self): #returns the plotDF of a the given solution
         return self._plotDF
 
-diffeq1 = Differential_Equation("", r"\frac{d^3y}{d x^3}+\frac{d^2y}{dx^2}+\frac{d y}{d x}+y\left(x\right)=5")
-solution = Differential_Equation_Solution(diffeq1, 0, 1, .01, [1,1,1,1], "RK4")
-print(solution.plotDF)
+# diffeq1 = Differential_Equation("", r"\frac{d^3y}{d x^3}+\frac{d^2y}{dx^2}+\frac{d y}{d x}+y\left(x\right)=5")
+# solution = Differential_Equation_Solution(diffeq1, 0, 1, .01, [1,1,1,1], "RK4")
+# print(solution.plotDF)

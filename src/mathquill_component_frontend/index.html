@@ -1,0 +1,299 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>MathQuill Input</title>
+  <link rel="stylesheet" href="./vendor/mathquill.css" />
+  <style>
+    /* Default to dark theme */
+    :root {
+      --border: rgba(49, 51, 63, 0.2);
+      --focus: #2563eb;
+      /* for light theme: --text: #111827; */
+      --text: #ffffff;
+      --muted: #6b7280;
+      --bg: #ffffff;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      padding: 0;
+      font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, sans-serif;
+      background: transparent;
+    }
+
+    .wrap {
+      width: 100%;
+      padding: 6px 0;
+    }
+
+    .label {
+      font-size: 0.92rem;
+      font-weight: 600;
+      margin-bottom: 8px;
+      color: var(--text);
+      line-height: 1.2;
+    }
+
+    .field {
+      min-height: 44px;
+      width: 100%;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 10px 12px;
+      background: var(--bg);
+      transition: border-color 120ms ease;
+      overflow-x: auto;
+      overflow-y: hidden;
+      white-space: nowrap;
+    }
+
+    .field:focus-within {
+      border-color: var(--focus);
+    }
+
+    .hint {
+      margin-top: 6px;
+      font-size: 0.8rem;
+      color: var(--muted);
+      line-height: 1.3;
+      min-height: 1.05rem;
+    }
+
+    .mq-editable-field {
+      width: 100%;
+      min-height: 22px;
+      font-size: 1.15rem;
+      line-height: 1.45;
+      border: none;
+    }
+
+    .error {
+      color: #b91c1c;
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div id="label" class="label"></div>
+    <div id="mq-container" class="field">
+      <span id="mq"></span>
+    </div>
+    <div id="hint" class="hint"></div>
+  </div>
+
+  <script type="module">
+    const Streamlit = {
+      API_VERSION: 1,
+      RENDER_EVENT: "streamlit:render",
+      events: new EventTarget(),
+      _lastFrameHeight: null,
+      _messageHandlerRegistered: false,
+      setComponentReady() {
+        if (!this._messageHandlerRegistered) {
+          window.addEventListener("message", this.onMessageEvent);
+          this._messageHandlerRegistered = true;
+        }
+        this.sendBackMsg("streamlit:componentReady", {
+          apiVersion: this.API_VERSION,
+        });
+      },
+      setFrameHeight(height) {
+        const nextHeight = height ?? document.body.scrollHeight;
+        if (nextHeight === this._lastFrameHeight) {
+          return;
+        }
+        this._lastFrameHeight = nextHeight;
+        this.sendBackMsg("streamlit:setFrameHeight", { height: nextHeight });
+      },
+      setComponentValue(value) {
+        this.sendBackMsg("streamlit:setComponentValue", {
+          value,
+          dataType: "json",
+        });
+      },
+      onMessageEvent(event) {
+        const data = event.data;
+        if (data?.type === Streamlit.RENDER_EVENT) {
+          const eventData = {
+            disabled: Boolean(data.disabled),
+            args: data.args ?? {},
+            theme: data.theme,
+          };
+          Streamlit.events.dispatchEvent(
+            new CustomEvent(Streamlit.RENDER_EVENT, { detail: eventData })
+          );
+        }
+      },
+      sendBackMsg(type, data) {
+        window.parent.postMessage(
+          {
+            isStreamlitMessage: true,
+            type,
+            ...data,
+          },
+          "*"
+        );
+      },
+    };
+
+    let mathField = null;
+    let lastValue = "";
+    let debounceTimer = null;
+    let currentArgs = {};
+
+    function loadCss(href) {
+      return new Promise((resolve, reject) => {
+        const existing = Array.from(document.querySelectorAll("link")).find((l) => l.href === href);
+        if (existing) {
+          resolve();
+          return;
+        }
+        const link = document.createElement("link");
+        link.rel = "stylesheet";
+        link.href = href;
+        link.onload = () => resolve();
+        link.onerror = () => reject(new Error("Failed CSS " + href));
+        document.head.appendChild(link);
+      });
+    }
+
+    function loadScript(src) {
+      return new Promise((resolve, reject) => {
+        const existing = Array.from(document.querySelectorAll("script")).find((s) => s.src === src);
+        if (existing) {
+          if (existing.dataset.loaded === "1") {
+            resolve();
+            return;
+          }
+          existing.addEventListener("load", () => resolve(), { once: true });
+          existing.addEventListener("error", () => reject(new Error("Failed script " + src)), { once: true });
+          return;
+        }
+        const script = document.createElement("script");
+        script.src = src;
+        script.async = true;
+        script.onload = () => {
+          script.dataset.loaded = "1";
+          resolve();
+        };
+        script.onerror = () => reject(new Error("Failed script " + src));
+        document.head.appendChild(script);
+      });
+    }
+
+    async function loadMathQuill() {
+      const sources = [
+        {
+          jquery: "https://cdn.jsdelivr.net/npm/jquery@3.7.1/dist/jquery.min.js",
+          css: "./vendor/mathquill.css",
+          js: "./vendor/mathquill.js",
+        },
+        {
+          jquery: "https://cdn.jsdelivr.net/npm/jquery@3.7.1/dist/jquery.min.js",
+          css: "https://cdn.jsdelivr.net/gh/desmosinc/mathquill@master/build/mathquill.css",
+          js: "https://cdn.jsdelivr.net/gh/desmosinc/mathquill@master/build/mathquill.js",
+        },
+        {
+          jquery: "https://cdn.jsdelivr.net/npm/jquery@3.7.1/dist/jquery.min.js",
+          css: "https://cdn.jsdelivr.net/npm/mathquill@0.10.1/build/mathquill.css",
+          js: "https://cdn.jsdelivr.net/npm/mathquill@0.10.1/build/mathquill.js",
+        },
+      ];
+
+      for (const source of sources) {
+        try {
+          await loadScript(source.jquery);
+          await loadCss(source.css);
+          await loadScript(source.js);
+          if (window.MathQuill) {
+            return;
+          }
+        } catch (_e) {
+          // Try next source.
+        }
+      }
+      throw new Error("Unable to load MathQuill from all sources.");
+    }
+
+	// Display placeholder/suggestion
+    function setHint(defaultFormula, isError) {
+      const MQ = window.MathQuill.getInterface(2);
+      const hint = document.getElementById("hint");
+      hint.innerHTML = `<div role="tooltip">e.g. <span>${defaultFormula}</span></div>`;
+      hint.className = isError ? "hint error" : "hint";
+      if (!isError) MQ.StaticMath(hint); // render the formula
+    }
+
+    function sendValue(value) {
+      Streamlit.setComponentValue(value);
+    }
+
+    function sendValueDebounced(value) {
+      const delay = Number(currentArgs.debounceMs || 180);
+      if (debounceTimer) {
+        clearTimeout(debounceTimer);
+      }
+      debounceTimer = setTimeout(() => sendValue(value), delay);
+    }
+
+    function ensureField(initialValue) {
+      if (mathField) {
+        return;
+      }
+
+      const MQ = window.MathQuill.getInterface(2);
+      const target = document.getElementById("mq");
+      mathField = MQ.MathField(target, {
+        handlers: {
+          edit: () => {
+            const val = mathField.latex();
+            lastValue = val;
+            sendValueDebounced(val);
+          },
+        },
+      });
+
+      if (typeof initialValue === "string") {
+        mathField.latex(initialValue);
+        lastValue = initialValue;
+      }
+    }
+
+    async function onRender(event) {
+      currentArgs = event.detail.args || {};
+      const label = currentArgs.label || "Equation";
+      const incomingValue = String(currentArgs.value || "");
+      const placeholder = String(currentArgs.placeholder || "");
+      const frameHeight = Number(currentArgs.height || 140);
+
+      document.getElementById("label").textContent = label;
+
+      try {
+        await loadMathQuill();
+        ensureField(incomingValue);
+
+        if (mathField && incomingValue !== lastValue) {
+          mathField.latex(incomingValue);
+          lastValue = incomingValue;
+        }
+
+        setHint(placeholder, false);
+      } catch (error) {
+        setHint("MathQuill failed to initialize. Please refresh the page.", true);
+      }
+
+      Streamlit.setFrameHeight(frameHeight);
+    }
+
+    Streamlit.events.addEventListener(Streamlit.RENDER_EVENT, onRender);
+    Streamlit.setComponentReady();
+    Streamlit.setFrameHeight(140);
+  </script>
+</body>
+</html>

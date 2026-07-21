@@ -1,12 +1,10 @@
 import streamlit as st
+from mathquill_component import mathquill_input
 from sympy.parsing.latex import parse_latex
 import sympy
 from sympy import Derivative, Symbol, Function, Mul, symbols
 from sympy.core.function import AppliedUndef # Crucial for finding mistaken function calls
-from elara_symbolic.cas import *
-from st_mathlive import mathfield
 import polars as pl
-from PIL import Image
 from differential_equation import *
 import numpy as np
 import re
@@ -79,7 +77,7 @@ else:
 
     An interactive differential equations solver, developed by [Project Elara](https://elaraproject.org/). Enter a differential equation and Infinitum will numerically solve it for you! Source code is available on our [Codeberg repository](https://codeberg.org/elaraproject/elara-symbolic-ui/)
 
-    :warning: Be aware that the app currently only supports first-order ODEs with $y(x)$ as the dependent variable, and it currently [does not work on Firefox](https://codeberg.org/elaraproject/elara-symbolic-ui/issues/31). Also, the app is _highly experimental_, so if you encounter bugs please [report them to us](https://codeberg.org/elaraproject/elara-symbolic-ui/issues)!
+    :warning: Be aware that the app is _highly experimental_, so if you encounter bugs please [report them to us](https://codeberg.org/elaraproject/elara-symbolic-ui/issues)!
     """)
 
     # Default ODE is the logistic equation
@@ -90,9 +88,21 @@ else:
                         in st.session_state else default_ode
 
     # Code for preliminary processing of the LaTeX
-    Tex, _ = mathfield(title="Enter Equations Here",
-            value=equation_to_load, 
-            mathml_preview=True, upright=False)
+    try:
+        Tex = mathquill_input(
+            label="Enter Equations Here",
+            value=equation_to_load,
+            key="mq_input",
+            placeholder=default_ode,
+        )
+    except:
+        # Hard fallback so equation input remains usable if the component fails.
+        Tex = st.text_input(
+            label="Enter Equations Here (LaTeX)",
+            value=equation_to_load,
+            key="mq_input_fallback",
+        )
+
     # Pause execution if equation is not yet parsed
     if not Tex:
         st.stop()
