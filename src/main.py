@@ -8,12 +8,56 @@ import polars as pl
 from PIL import Image
 import numpy as np
 import re
+import json
+from pathlib import Path
+from datetime import datetime
 
 from mathquill_component import mathquill_input
+
+# History file storage
+HISTORY_FILE = Path.home() / ".infinitum_history.json"
+
+def load_history():
+    """Load calculation history from disk."""
+    if HISTORY_FILE.exists():
+        try:
+            with open(HISTORY_FILE, 'r') as f:
+                return json.load(f)
+        except (json.JSONDecodeError, IOError):
+            return []
+    return []
+
+def save_history(history):
+    """Save calculation history to disk."""
+    try:
+        with open(HISTORY_FILE, 'w') as f:
+            json.dump(history, f, indent=2)
+    except IOError as e:
+        st.warning(f"Could not save history: {e}")
+
+def add_to_history(equation, constants, lower_range, upper_range, step_size, y0, solver):
+    """Add a calculation to history."""
+    history = load_history()
+    entry = {
+        "timestamp": datetime.now().isoformat(),
+        "equation": equation,
+        "constants": constants,
+        "lower_range": lower_range,
+        "upper_range": upper_range,
+        "step_size": step_size,
+        "y0": y0,
+        "solver": solver
+    }
+    history.append(entry)
+    # Keep only last 50 entries to avoid huge file
+    if len(history) > 50:
+        history = history[-50:]
+    save_history(history)
 
 if "app_loaded" not in st.session_state:
     st.toast("App loading...", icon="ℹ", duration=2)
     st.session_state["app_loaded"] = True
+    st.session_state["calculation_history"] = load_history()
 
 def process_raw_text(Tex: str):
     r"""Implements a method for processing a raw user input string
@@ -291,6 +335,11 @@ def process_input_and_graph(upperRange: int, lowerRange: int, stepSize: int, Tex
                 st.session_state["ode_solution"] = plotDF
                 st.session_state["functions"] = functions
                 st.session_state["latex"] = Tex
+                
+                # Save to history
+                add_to_history(Tex, constantValues, lowerRange, upperRange, stepSize, Y0, solver)
+                st.session_state["calculation_history"] = load_history()
+                
                 print(plotDF.head(5))
             else:
                 #this converts our sympy back into latex so it can be displayed again to the human eye so
@@ -324,6 +373,46 @@ else:
     :warning: Be aware that the app currently only supports first-order ODEs with $y(x)$ as the dependent variable, and it currently [does not work on Firefox](https://codeberg.org/elaraproject/elara-symbolic-ui/issues/31). Also, the app is _highly experimental_, so if you encounter bugs please [report them to us](https://codeberg.org/elaraproject/elara-symbolic-ui/issues)!
     """)
 
+    # Display calculation history in sidebar
+    with st.sidebar:
+        st.markdown("### 📋 Calculation History")
+        history = st.session_state.get("calculation_history", [])
+        
+        if history:
+            if st.button("🗑️ Clear History", key="clear_history_btn"):
+                save_history([])
+                st.session_state["calculation_history"] = []
+                st.rerun()
+            
+            st.markdown("---")
+            st.markdown("**Recent Calculations:**")
+            
+            # Display history in reverse order (newest first)
+            for idx, entry in enumerate(reversed(history[-10:])):
+                equation = entry.get("equation", "Unknown")
+                timestamp = entry.get("timestamp", "")
+                
+                # Format timestamp
+                if timestamp:
+                    try:
+                        dt = datetime.fromisoformat(timestamp)
+                        time_str = dt.strftime("%m/%d %H:%M")
+                    except:
+                        time_str = "Unknown"
+                else:
+                    time_str = "Unknown"
+                
+                # Create a button to load this calculation
+                if st.button(
+                    f"📌 {equation[:30]}...\n_{time_str}_",
+                    key=f"history_btn_{len(history)-1-idx}",
+                    use_container_width=True
+                ):
+                    # Load the calculation
+                    st.session_state["diffeq"] = equation
+                    st.session_state["load_history_entry"] = entry
+                    st.rerun()
+
     # Default ODE is the logistic equation
     default_ode = r"\frac{dy}{dx} = y(1 - y)"
     Tex = default_ode
@@ -355,6 +444,27 @@ else:
     # equation and load it
     #st.session_state["diffeq"] = Tex
 
+    # Check if we should load a history entry
+    if "load_history_entry" in st.session_state:
+        entry = st.session_state["load_history_entry"]
+        
+        # Restore parameters from history
+        selected_constants = list(entry.get("constants", {}).keys())
+        constant_values = entry.get("constants", {})
+        lowerRange = entry.get("lower_range", 0.0)
+        upperRange = entry.get("upper_range", 1.0)
+        stepSize = entry.get("step_size", 0.01)
+        Y0 = entry.get("y0", "0.5")
+        selected_constants_dropdown = entry.get("solver", "Base")
+        
+        # Clear the load flag
+        del st.session_state["load_history_entry"]
+        
+        # Auto-solve the loaded calculation
+        st.info("✨ Loaded from history! Solving...")
+        process_input_and_graph(upperRange, lowerRange, stepSize, Tex, constant_values, Y0, selected_constants_dropdown)
+        st.rerun()
+    
     # code for selecting what will be a constant and setting the value of said constant
     selected_constants = st.multiselect(label="Enter List of Constants", options=list('abcdefghijklmnopqrstuvwxyz'))
     constant_values = {i : 0.0 for i in selected_constants}
