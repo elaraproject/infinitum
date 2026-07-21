@@ -1,14 +1,15 @@
 import streamlit as st
 import sympy
+import numpy as np
+import re
 from sympy.parsing.latex import parse_latex
 from sympy import Derivative, Symbol, Function, Mul, symbols
 from sympy.core.function import AppliedUndef # Crucial for finding mistaken function calls
-from st_mathlive import mathfield
-import polars as pl
+from polars import DataFrame
+# Elara Symbolic imports must be at the end to avoid
+# cyclical imports, which can cause an out-of-memory error
 from elara_symbolic.cas import solve_ode
 from elara_symbolic.numerical import RK4
-import numpy as np
-import re
 
 class Differential_Equation:
     def __init__(self, strConstants, Tex):
@@ -176,7 +177,7 @@ class Differential_Equation_Solution:
                 conv = substitution_funcs[i+1]
                 func_list.append(substitute)
                 eq = eq.subs(substitute.diff(dependent_symb), conv)
-            func_list.append(conv)
+                func_list.append(conv)
             eq = sympy.Eq(eq.lhs - eq.rhs, 0)
             return (eq, func_list)
         def convert_diffeq_to_matrix(eq, func_list):
@@ -238,7 +239,7 @@ class Differential_Equation_Solution:
         # is used here to prevent the UI elements
         # from being displayed until the dataframe
         # is successfully populated
-        self._plotDF = pl.DataFrame({"x": de_sols['t']} | {kv: de_sols[kv].reshape(-1) for kv in functions})
+        self._plotDF = DataFrame({"x": de_sols['t']} | {kv: de_sols[kv].reshape(-1) for kv in functions})
 
     @property
     def plotDF(self): #returns the plotDF of a the given solution

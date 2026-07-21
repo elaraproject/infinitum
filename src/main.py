@@ -1,13 +1,6 @@
 import streamlit as st
 from mathquill_component import mathquill_input
-from sympy.parsing.latex import parse_latex
-import sympy
-from sympy import Derivative, Symbol, Function, Mul, symbols
-from sympy.core.function import AppliedUndef # Crucial for finding mistaken function calls
-import polars as pl
 from differential_equation import *
-import numpy as np
-import re
 
 if "app_loaded" not in st.session_state:
     st.toast("App loading...", icon="ℹ", duration=2)
