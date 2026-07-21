@@ -5,7 +5,8 @@ description = "Web UI for elara-symbolic (Project Elara's toolkit for physics an
 authors = [
 	{name = "Jacob Thomas",email = "jstevethom@gmail.com"},
 	{name = "Jacky Song",email = "jacky.song.elara@gmail.com"},
-    {name = "David Yang",email = "yangd12@rpi.edu"}
+    {name = "David Yang",email = "yangd12@rpi.edu"},
+    {name = "Yiqi Cheng",email = "chengy11@rpi.edu"}
 ]
 license = "MIT"
 readme = "README.md"
