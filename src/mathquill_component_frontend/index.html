@@ -6,10 +6,12 @@
   <title>MathQuill Input</title>
   <link rel="stylesheet" href="./vendor/mathquill.css" />
   <style>
+    /* Default to dark theme */
     :root {
       --border: rgba(49, 51, 63, 0.2);
       --focus: #2563eb;
-      --text: #111827;
+      /* for light theme: --text: #111827; */
+      --text: #ffffff;
       --muted: #6b7280;
       --bg: #ffffff;
     }
@@ -22,7 +24,6 @@
       margin: 0;
       padding: 0;
       font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, sans-serif;
-      color: var(--text);
       background: transparent;
     }
 
@@ -220,10 +221,13 @@
       throw new Error("Unable to load MathQuill from all sources.");
     }
 
-    function setHint(text, isError) {
+	// Display placeholder/suggestion
+    function setHint(defaultFormula, isError) {
+      const MQ = window.MathQuill.getInterface(2);
       const hint = document.getElementById("hint");
-      hint.textContent = text || "";
+      hint.innerHTML = `<div role="tooltip">e.g. <span>${defaultFormula}</span></div>`;
       hint.className = isError ? "hint error" : "hint";
+      if (!isError) MQ.StaticMath(hint); // render the formula
     }
 
     function sendValue(value) {

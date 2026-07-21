@@ -119,3 +119,4 @@ If you'd like to help fund our work, you can support us on OpenCollective:
 - [Jacky Song](https://codeberg.org/songtech-0912)
 - [Jacob Thomas](https://codeberg.org/NHWXCodeberg)
 - [David Yang](https://codeberg.org/David_Y)
+- [Yiqi Cheng](https://codeberg.org/andycheng)
