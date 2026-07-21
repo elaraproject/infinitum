@@ -11,11 +11,43 @@ import re
 import json
 from pathlib import Path
 from datetime import datetime
+import logging
+import io
+import sys
 
 from mathquill_component import mathquill_input
 
 # History file storage
 HISTORY_FILE = Path.home() / ".infinitum_history.json"
+
+# Logging system
+class StreamlitLogCapture:
+    """Capture logs and errors for display in UI."""
+    def __init__(self, max_entries=100):
+        self.logs = []
+        self.max_entries = max_entries
+    
+    def add_log(self, level, message):
+        """Add a log entry."""
+        entry = {
+            "timestamp": datetime.now().strftime("%H:%M:%S"),
+            "level": level,
+            "message": str(message)
+        }
+        self.logs.append(entry)
+        if len(self.logs) > self.max_entries:
+            self.logs = self.logs[-self.max_entries:]
+    
+    def clear(self):
+        """Clear all logs."""
+        self.logs = []
+    
+    def get_logs(self):
+        """Get all logs."""
+        return self.logs
+
+# Global logger instance
+log_capture = StreamlitLogCapture()
 
 def load_history():
     """Load calculation history from disk."""
@@ -58,6 +90,8 @@ if "app_loaded" not in st.session_state:
     st.toast("App loading...", icon="ℹ", duration=2)
     st.session_state["app_loaded"] = True
     st.session_state["calculation_history"] = load_history()
+    st.session_state["ui_logs"] = []
+    log_capture.add_log("INFO", "Application started")
 
 def process_raw_text(Tex: str):
     r"""Implements a method for processing a raw user input string
@@ -297,8 +331,13 @@ def solve_differential_equation(upperRange: int, lowerRange: int, stepSize: floa
 # takes the equation, and the bounds and produces a graph from it
 def process_input_and_graph(upperRange: int, lowerRange: int, stepSize: int, Tex: str, constantValues: dict, Y0: str, solver: str):
     Y0 = [float(i) for i in Y0.split(",")]
+    log_capture.add_log("INFO", f"Starting to solve: {Tex}")
+    log_capture.add_log("INFO", f"Solver: {solver}, Range: [{lowerRange}, {upperRange}], Step: {stepSize}")
+    
     if upperRange <= lowerRange:
-        st.write("Unable to display equation: lower bound is greater than or equal to upper bound.")
+        error_msg = "Unable to display equation: lower bound is greater than or equal to upper bound."
+        st.write(error_msg)
+        log_capture.add_log("ERROR", error_msg)
     else:
         # Warn user; since it does actually take a while to solve
         # and we don't want the user to think nothing is happening
@@ -313,8 +352,11 @@ def process_input_and_graph(upperRange: int, lowerRange: int, stepSize: int, Tex
             while not solve_complete:
                 try:
                     de_sols = solve_differential_equation(upperRange, lowerRange, stepSize, Tex, constantValues, Y0, solver)
+                    log_capture.add_log("SUCCESS", "Differential equation solved successfully")
                 except ValueError as e:
-                    st.error(f"Solve unsuccessful: {str(e)}")
+                    error_msg = f"Solve unsuccessful: {str(e)}"
+                    st.error(error_msg)
+                    log_capture.add_log("ERROR", error_msg)
                 solve_complete = True
             if de_sols:
                 st.session_state["valid_equation"] = True
@@ -339,12 +381,14 @@ def process_input_and_graph(upperRange: int, lowerRange: int, stepSize: int, Tex
                 # Save to history
                 add_to_history(Tex, constantValues, lowerRange, upperRange, stepSize, Y0, solver)
                 st.session_state["calculation_history"] = load_history()
+                log_capture.add_log("INFO", f"Calculation saved to history. Total entries: {len(st.session_state['calculation_history'])}")
                 
                 print(plotDF.head(5))
             else:
                 #this converts our sympy back into latex so it can be displayed again to the human eye so
                 #accuracy can be confirmed
                 st.session_state["valid_equation"] = False
+                log_capture.add_log("WARNING", "No solution found")
 
 if "ode_solution" in st.session_state:
     if st.session_state["valid_equation"]:
@@ -412,6 +456,36 @@ else:
                     st.session_state["diffeq"] = equation
                     st.session_state["load_history_entry"] = entry
                     st.rerun()
+        
+        # Log viewer in sidebar
+        st.markdown("---")
+        st.markdown("### 📋 Event Log")
+        
+        logs = log_capture.get_logs()
+        if logs:
+            if st.button("🗑️ Clear Logs", key="clear_logs_btn"):
+                log_capture.clear()
+                st.rerun()
+            
+            # Create color-coded log display
+            log_html = ""
+            for log_entry in logs[-20:]:  # Show last 20 logs
+                level = log_entry["level"]
+                message = log_entry["message"]
+                timestamp = log_entry["timestamp"]
+                
+                if level == "SUCCESS":
+                    color = "🟢"
+                elif level == "ERROR":
+                    color = "🔴"
+                elif level == "WARNING":
+                    color = "🟡"
+                else:
+                    color = "⚪"
+                
+                st.caption(f"{color} `{timestamp}` {level}: {message}")
+        else:
+            st.caption("📝 No logs yet")
 
     # Default ODE is the logistic equation
     default_ode = r"\frac{dy}{dx} = y(1 - y)"
