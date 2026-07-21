@@ -1,18 +1,17 @@
 import streamlit as st
-import sympy
-import numpy as np
-import re
 from sympy.parsing.latex import parse_latex
+import sympy
 from sympy import Derivative, Symbol, Function, Mul, symbols
 from sympy.core.function import AppliedUndef # Crucial for finding mistaken function calls
-from polars import DataFrame
-# Elara Symbolic imports must be at the end to avoid
-# cyclical imports, which can cause an out-of-memory error
-from elara_symbolic.cas import solve_ode
-from elara_symbolic.numerical import RK4
+from st_mathlive import mathfield
+import polars as pl
+from elara_symbolic.cas import *
+from PIL import Image
+import numpy as np
+import re
 
 class Differential_Equation:
-    def __init__(self, strConstants, Tex):
+    def __init__(self, strConstants: list[str], Tex: str):
 
         def process_raw_text(Tex: str):
             r"""Implements a method for processing a raw user input string
@@ -39,16 +38,38 @@ class Differential_Equation:
 
             return newTex
 
-        def solve_differential_equation(self, expr: sympy.Eq):
-            print(expr)
-            # parse the LaTeX provided by the user into a differential equation
+        def process_differential_equation(self, expr: sympy.Eq):
+            r"""Implements a method for processing sympy's 'bad' differential equation parsing into
+            a differential equation that can be solved by elara_symbolic using situation-specific
+            parsing for ordinary diffferential equations
+
+            Parameters
+            ----------
+            expr : sympy.Eq
+            Accepts the user's input equation to be parsed
+
+            Examples
+            ---------
+            >>> processed_expr = process_raw_text(r"\frac{\mathrm{d}y}{\mathrm{d}x}=y(1-y)")
+                This sets the properties of self._indep_var to x, self._dep_var to y(x), 
+                and self._expr to dy/dx=y(1-y)
+            
+            """
             def replace_derivative(expr_to_fix):
-                """
-                    This accepts a sympy expression "expr_fragment" and then it basically parses in this expr fragment any subfragments that
-                    can be identified as a falsely parsed higher order differential where sympy cannot parse with its latex parser but its parsing
-                    is standardized enough we can create this function to do it for us. This function finds these recursively using that inner function.
-                    It returns the correct expression rather than directly modifying the expression and inside our function to solve the differential equation it returns whether
-                    the equation is a higher order differential equation though that functionality may soon be replaced.
+                r"""This function manages to replace any derivatives at a higher order than dy/dx
+                to d^2 y /dx^2 such that d is not a constant or symbol but rather it a d^2 y. So
+                for higher order diffeqs it fixes sympy's poor processing of the differential.
+
+                Parameters
+                ----------
+                expr_to_fix : sympy.Eq
+                Accepts the user's equation where the differentials should be processed correcctly
+
+                Examples
+                ---------
+                >>> processed_expr = process_raw_text(sympy.Eq(d^2y/dx^2 = y(1-y)))
+                    This converts the it such that the d^2y/dx^2 is a differential rather than where d is a symbol (d^2)*(y)
+                
                 """
                 
                 def match_and_transform(expr_fragment):
@@ -62,10 +83,22 @@ class Differential_Equation:
                 # Run our inner function which recurisvely searches for incorrect sympy atoms
                 return expr_to_fix.replace(lambda x: True, match_and_transform)
             #this finds and fixes implicit multiplication like y(1-y) rather than converting them to function calls
-            def fix_implicit_multiplication(node):
-                """
-                This function is quite simple. It is a function that takes a given unapplied def falsely parsed by sympy like y(1-y) which may be
-                parsed as a function but we assume in this code is always y*(1-y) and simply returns y*(1-y) or just node with the proper expression.
+            def fix_implicit_multiplication(node: sympy.Eq):
+                r"""This function is a recursive function that converts function calls that imply implicit multiplication
+                to a a multiplicative expression
+
+                Parameters
+                ----------
+                node : sympy.Eq
+                Accepts the node on which to run the recursive function and check for implicit multiplication.
+
+                Examples
+                ---------
+                >>> processed_expr = process_raw_text(sympy.Eq(y(y(y(y)-1)))))
+                    this converts the given expression to y*(interior) and does a recursive call to convert the interior of y(y(y(y)-1))
+                    such that it convers all the calls that are not y(indep_var) to multiplication because we've chosen not to support that
+                    for this ODE class.
+                
                 """
                 func_name = node.func.__name__
                 args = node.args
@@ -115,17 +148,20 @@ class Differential_Equation:
             self._dep_func = dep_func            
             self._expr = expr
         
-        def process_constants(self, Constants):
+        def process_constants(self, Constants: list[str]) -> dict[str : sympy.Symbol]:
             # create a dictionary of constants for the parsing
             parseConstants = { i : Symbol(i, constant=True, real=True) for i in Constants }
             # substitute parsed constants
             self._expr = self._expr.subs(parseConstants)
             return parseConstants
 
-        
+        #Begin by processing the latex so that it can be processed correctly by 
         unprocessed_sympy = parse_latex(process_raw_text(Tex), strict = False)
+        #Save the string we created
         self._latex = Tex
-        solve_differential_equation(self, unprocessed_sympy)
+        #This function here saves the differential equation's information as class variables that can be accessed by properties
+        process_differential_equation(self, unprocessed_sympy)
+        #Finish processing the differential equations by substituting in the constants and save the list of constants as a property
         self._constants = process_constants(self, {i for i in strConstants})
     
     #Properties of the function that should not be modifiable parts of the class
@@ -156,15 +192,25 @@ class Differential_Equation_Solution:
         self._Y0 = Y0
         self._solver = solver
 
-        def solve_higher_order_diffeq(eq, dep_func) -> tuple[sympy.Eq, list[Symbol]]:
-            """
-            NOTE: Must change the name of this function it is bad.
-            This function accepts an equation and a dependent function and substitutes each derivative of the dependent function except for
-            the highest one (which stays a derivative of the substitution for the second highest function) with a substitute function for its
-            order so y0 for dy/dx, y1 for d^2 y/dx^2, etc. It accepts eq, the equation to be substituted, and dep_func which is the dependent
-            function so we know what function we are substituting. This function is useful for solving higher order diffeqs because it allows
-            us to very easily get the coefficients of each derivative and solve using the method we use to solve higher order diffeqs. This
-            returns the substituted equations and saves all the substituted equations in func_list.
+        def substitute_higher_differentials(eq: sympy.Eq, dep_func: sympy.Function) -> tuple[sympy.Eq, list[Symbol]]:
+            r"""This accepts a higher order differential equation such that it substitutes higher order differential equations
+            with substitute functions that allow for a reduction of order to be performed. It returns a list of the substitution
+            functions and the substituted differential equation itself.
+
+                Parameters
+                ----------
+                eq : sympy.Eq
+                Accepts the higher order differential equation such that we can substitute the higher order differentials.
+
+                node : sympy.Function
+                Accepts the dependent function so that the order of the differential equation can be deduced.
+
+                Examples
+                ---------
+                >>> processed_expr = substitute_higher_differentials(sympy.Eq(d^2y/dx^2 + d^3y/dx^3 + dy/dx + y(x) = 5))
+                    This substitutes the higher order differentials except for the highest order ones with characters so
+                    it becomes dy1/dx + y1(x) + y0(x) + y(x) = 5. It also returns the funclist of [y(x),y0(x),y1(x),dy2/dx]
+                
             """
             func_list = []
             dependent_symb = dep_func.free_symbols.pop()
@@ -177,14 +223,27 @@ class Differential_Equation_Solution:
                 conv = substitution_funcs[i+1]
                 func_list.append(substitute)
                 eq = eq.subs(substitute.diff(dependent_symb), conv)
-                func_list.append(conv)
+            func_list.append(conv)
             eq = sympy.Eq(eq.lhs - eq.rhs, 0)
             return (eq, func_list)
-        def convert_diffeq_to_matrix(eq, func_list):
-            """
-            This function runs a reduction of order on an equation that has been ran through the function that substitutes derivatives for functions
-            stored in func_list. This takes the coefficients and uses them to calculate a matrix that can be passed to RK4. This is the matrix a that
-            is returned. It's a 2d numpy array of n-1 x n-1 where n is the order of the differential equation.
+        def convert_diffeq_to_matrix(eq: sympy.Eq, func_list: list[sympy.Function]) -> np.array:
+            r"""This function creates a reduction of order matrix so that a function can be solved even at a higher
+            order. Basically an array of coefficients to be solved in a way that RK4 can tolerate.
+
+                Parameters
+                ----------
+                eq : sympy.Eq
+                Accepts a substituted equation where the higher order differentials have been replaced by functions.
+
+                func_list : list[sympy.Function]
+                accepts a list of dependent differential functions to iterate through for finding the coefficients.
+
+                Examples
+                ---------
+                >>> processed_expr = substitute_higher_differentials(sympy.Eq(dy1/dx + y1(x) + y0(x) + y(x) = 5), [y(x),y0(x),y1(x),dy2/dx])
+                    This creates a matrix of floats such that the coefficients in front of each get turned into an array of order x order
+                    coefficients. it returns this array.
+                
             """
             func_list.append(eq.atoms(sympy.Derivative).pop())
             a = np.empty((len(func_list)-1,len(func_list)-1))
@@ -212,15 +271,14 @@ class Differential_Equation_Solution:
                 de_sols = solve_ode(diffeq.expr, diffeq.dep_func, solver="leapfrog", y0=Y0[0], v0=Y0[1], t_span=(lowerRange, upperRange), constants=constantPass, step_size=stepSize)
                 de_sols['y'] = de_sols["x"][:, 0]
         elif solver == "RK4":
-            temp = solve_higher_order_diffeq(diffeq.expr, diffeq.dep_func)
+            temp = substitute_higher_differentials(diffeq.expr, diffeq.dep_func)
             higherOrderMatrix = convert_diffeq_to_matrix(*temp)
-            print(higherOrderMatrix)
             if sympy.ode_order(diffeq.expr, diffeq.dep_func) == 1:
                 f = sympy.lambdify((diffeq.indep_var, diffeq.dep_func), expr.rhs, modules="numpy")
             else:
                 def f(t, y):
                     return higherOrderMatrix @ y
-            x0 = np.array([1.0 for _ in Y0])
+            x0 = np.array([_ for _ in Y0])
             de_sols = RK4(f, x0=x0, t_span=(lowerRange, upperRange), step_size=stepSize)
             if 'v' in de_sols:
                 de_sols['y'] = de_sols["x"][:, 0]
@@ -239,12 +297,12 @@ class Differential_Equation_Solution:
         # is used here to prevent the UI elements
         # from being displayed until the dataframe
         # is successfully populated
-        self._plotDF = DataFrame({"x": de_sols['t']} | {kv: de_sols[kv].reshape(-1) for kv in functions})
+        self._functions = functions
+        self._plotDF = pl.DataFrame({"x": de_sols['t']} | {kv: de_sols[kv].reshape(-1) for kv in functions})
 
     @property
     def plotDF(self): #returns the plotDF of a the given solution
         return self._plotDF
-
-# diffeq1 = Differential_Equation("", r"\frac{d^3y}{d x^3}+\frac{d^2y}{dx^2}+\frac{d y}{d x}+y\left(x\right)=5")
-# solution = Differential_Equation_Solution(diffeq1, 0, 1, .01, [1,1,1,1], "RK4")
-# print(solution.plotDF)
+    @property
+    def functions(self): #returns a list of the given derivatives
+        return self._functions
