@@ -1,14 +1,14 @@
-import streamlit as st
-from sympy.parsing.latex import parse_latex
 import sympy
-from sympy import Derivative, Symbol, Function, Mul, symbols
-from sympy.core.function import AppliedUndef # Crucial for finding mistaken function calls
-from st_mathlive import mathfield
-import polars as pl
-from elara_symbolic.cas import *
-from PIL import Image
 import numpy as np
 import re
+from sympy.parsing.latex import parse_latex
+from sympy import Derivative, Symbol, Function, Mul
+from sympy.core.function import AppliedUndef # Crucial for finding mistaken function calls
+from polars import DataFrame
+# Elara Symbolic imports must be at the end to avoid
+# cyclical imports, which can cause an out-of-memory error
+from elara_symbolic.cas import solve_ode
+from elara_symbolic.numerical import RK4
 
 class Differential_Equation:
     def __init__(self, strConstants: list[str], Tex: str):
@@ -263,18 +263,35 @@ class Differential_Equation_Solution:
         de_sols = {}
         constantPass = [(diffeq.constants[i], diffeq.constants.values()[i]) for i in diffeq.constants.keys()]
         if self._solver == "Base":
-            de_sols = solve_ode(diffeq.expr, diffeq.dep_func, solver="trapezoidal", y0=Y0[0], t_span=(lowerRange, upperRange), constants=constantPass, step_size=stepSize)
+            de_sols = solve_ode(diffeq.expr, diffeq.dep_func, solver="auto", y0=Y0[0], t_span=(lowerRange, upperRange), constants=constantPass, step_size=stepSize)
+            de_sols['y'] = de_sols["x"]
+            """
+            if sympy.ode_order(diffeq.expr, diffeq.dep_func) == 1:
+                de_sols = solve_ode(diffeq.expr, diffeq.dep_func, solver="auto", y0=Y0[0], t_span=(lowerRange, upperRange), constants=constantPass, step_size=stepSize)
+                # the following line fixes an elara-symbolic incompatibility
+                # since elara-symbolic names the dependent variable "x"
+                # but we use "y" as the dependent variable
+                # de_sols['y'] = de_sols["x"]
+            else:
+                if len(Y0) < 2:
+                    raise ValueError("Value of Y0 should have at least 2 arguments for 2nd-order ODE or higher!")
+                de_sols = solve_ode(diffeq.expr, diffeq.dep_func, solver="auto", y0=Y0[0], v0=Y0[1], t_span=(lowerRange, upperRange), constants=constantPass, step_size=stepSize)
+                de_sols['y'] = de_sols["x"][:, 0]
+            """
         elif self._solver == "leapfrog":
             if sympy.ode_order(diffeq.expr, diffeq.dep_func) == 1:
                 de_sols = solve_ode(diffeq.expr, diffeq.dep_func, solver="leapfrog", y0=Y0[0], t_span=(lowerRange, upperRange), constants=constantPass, step_size=stepSize)
+                de_sols['y'] = de_sols["x"]
             else:
+                if len(Y0) < 2:
+                    raise ValueError("Value of Y0 should have at least 2 arguments for 2nd-order ODE or higher!")
                 de_sols = solve_ode(diffeq.expr, diffeq.dep_func, solver="leapfrog", y0=Y0[0], v0=Y0[1], t_span=(lowerRange, upperRange), constants=constantPass, step_size=stepSize)
                 de_sols['y'] = de_sols["x"][:, 0]
         elif solver == "RK4":
             temp = substitute_higher_differentials(diffeq.expr, diffeq.dep_func)
             higherOrderMatrix = convert_diffeq_to_matrix(*temp)
             if sympy.ode_order(diffeq.expr, diffeq.dep_func) == 1:
-                f = sympy.lambdify((diffeq.indep_var, diffeq.dep_func), expr.rhs, modules="numpy")
+                f = sympy.lambdify((diffeq.indep_var, diffeq.dep_func), diffeq.expr.rhs, modules="numpy")
             else:
                 def f(t, y):
                     return higherOrderMatrix @ y
@@ -298,7 +315,7 @@ class Differential_Equation_Solution:
         # from being displayed until the dataframe
         # is successfully populated
         self._functions = functions
-        self._plotDF = pl.DataFrame({"x": de_sols['t']} | {kv: de_sols[kv].reshape(-1) for kv in functions})
+        self._plotDF = DataFrame({"x": de_sols['t']} | {kv: de_sols[kv].reshape(-1) for kv in functions})
 
     @property
     def plotDF(self): #returns the plotDF of a the given solution

@@ -1,6 +1,6 @@
 import streamlit as st
 from mathquill_component import mathquill_input
-from differential_equation import *
+from differential_equation import Differential_Equation, Differential_Equation_Solution
 
 if "app_loaded" not in st.session_state:
     st.toast("App loading...", icon="ℹ", duration=2)
@@ -17,7 +17,7 @@ def process_input_and_graph(upperRange: int, lowerRange: int, stepSize: int, Tex
         st.toast("Solving might be slow and take a while",
 	                 icon="ℹ",
                  duration="short")
-        with st.spinner("Solving in progress...", show_time=True) as status:
+        with st.spinner("Solving in progress...", show_time=True):
             solve_complete = False
             de_sols = None
             # Crude way of blocking execution of further code
@@ -88,7 +88,9 @@ else:
             key="mq_input",
             placeholder=default_ode,
         )
-    except:
+    except Exception as e:
+        print("[Error] equation input/parsing error!")
+        print(e)
         # Hard fallback so equation input remains usable if the component fails.
         Tex = st.text_input(
             label="Enter Equations Here (LaTeX)",
@@ -103,7 +105,8 @@ else:
     # code for selecting what will be a constant and setting the value of said constant
     selected_constants = st.multiselect(label="Enter List of Constants", options=list('abcdefghijklmnopqrstuvwxyz'))
     constant_values = {i : 0.0 for i in selected_constants}
-    if type(constant_values) == None: constant_values = {}
+    if constant_values is None:
+        constant_values = {}
     for letter in selected_constants:
         constant_values[letter] = st.number_input(label=f"enter constant value for {letter}: ", value=0.0)
 
