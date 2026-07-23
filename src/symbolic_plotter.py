@@ -16,6 +16,14 @@ import matplotlib.pyplot as plt
 from typing import Dict, List, Tuple, Set
 
 
+class SymbolicPlotterError(Exception):
+    """Base exception for symbolic plotter failures."""
+
+
+class PlotGenerationError(SymbolicPlotterError):
+    """Raised when a plot cannot be generated from the current expression."""
+
+
 class SymbolicFunctionPlotter:
     """Parse and plot symbolic mathematical expressions."""
     
@@ -117,8 +125,7 @@ class SymbolicFunctionPlotter:
             return fig
             
         except Exception as e:
-            st.error(f"Error generating plot: {str(e)}")
-            return None
+            raise PlotGenerationError(f"Error generating plot: {str(e)}") from e
     
     def generate_polar_plot(self, theta_range: Tuple[float, float] = (0, 2*np.pi),
                            num_points: int = 500) -> plt.Figure:
@@ -167,8 +174,7 @@ class SymbolicFunctionPlotter:
             return fig
             
         except Exception as e:
-            st.error(f"Error generating polar plot: {str(e)}")
-            return None
+            raise PlotGenerationError(f"Error generating polar plot: {str(e)}") from e
 
 
 def create_plotter_ui():
@@ -235,15 +241,17 @@ def create_plotter_ui():
             # Plot generation
             if st.button("📈 Generate Plot"):
                 with st.spinner("Generating plot..."):
-                    if plot_type == "Cartesian (y=f(x))":
-                        x_min = st.slider("X min", -50.0, 50.0, -10.0, key="x_min")
-                        x_max = st.slider("X max", -50.0, 50.0, 10.0, key="x_max")
-                        fig = plotter.generate_cartesian_plot(x_range=(x_min, x_max))
-                    else:
-                        fig = plotter.generate_polar_plot()
-                    
-                    if fig:
+                    try:
+                        if plot_type == "Cartesian (y=f(x))":
+                            x_min = st.slider("X min", -50.0, 50.0, -10.0, key="x_min")
+                            x_max = st.slider("X max", -50.0, 50.0, 10.0, key="x_max")
+                            fig = plotter.generate_cartesian_plot(x_range=(x_min, x_max))
+                        else:
+                            fig = plotter.generate_polar_plot()
+
                         st.pyplot(fig)
                         st.session_state.last_plot = fig
+                    except PlotGenerationError as exc:
+                        st.error(str(exc))
         else:
             st.error("❌ Invalid expression. Please check the syntax.")
