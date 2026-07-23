@@ -304,8 +304,15 @@ def solve_differential_equation(upperRange: int, lowerRange: int, stepSize: floa
     de_sols = {}
     #This implements one algorithm for solving differential equations
     if solver == "Base":
-        de_sols = solve_ode(expr, dep_func, solver="trapezoidal", y0=Y0[0], t_span=(lowerRange, upperRange), constants=constantPass, step_size=stepSize)
-        print(de_sols)
+        de_sols = solve_ode(expr, dep_func, solver="auto", y0=Y0[0], t_span=(lowerRange, upperRange), constants=constantPass, step_size=stepSize)
+        if de_sols is not None:
+            # i.e. solve succeeded
+            # to fix an Elara symbolic bug where some of the numerical
+            # solvers return "x" as the solution key whereas others return "y"
+            if not "y" in de_sols:
+                de_sols["y"] = de_sols["x"]
+        else:
+            st.warning("Differential equation solve failed!")
     elif solver == "Leapfrog":
         if sympy.ode_order(expr, dep_func) == 1:
             de_sols = solve_ode(expr, dep_func, solver="leapfrog", y0=Y0[0], t_span=(lowerRange, upperRange), constants=constantPass, step_size=stepSize)
