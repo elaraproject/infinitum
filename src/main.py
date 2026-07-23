@@ -446,16 +446,21 @@ else:
                 else:
                     time_str = "Unknown"
                 
-                # Create a button to load this calculation
-                if st.button(
-                    f"📌 {equation[:30]}...\n_{time_str}_",
-                    key=f"history_btn_{len(history)-1-idx}",
-                    use_container_width=True
-                ):
-                    # Load the calculation
-                    st.session_state["diffeq"] = equation
-                    st.session_state["load_history_entry"] = entry
-                    st.rerun()
+                history_container = st.container()
+                with history_container:
+                    st.latex(equation)
+                    st.caption(time_str)
+
+                    # Create a button to load this calculation
+                    if st.button(
+                        "📌 Load this calculation",
+                        key=f"history_btn_{len(history)-1-idx}",
+                        use_container_width=True
+                    ):
+                        # Load the calculation
+                        st.session_state["diffeq"] = equation
+                        st.session_state["load_history_entry"] = entry
+                        st.rerun()
         
         # Log viewer in sidebar
         st.markdown("---")
