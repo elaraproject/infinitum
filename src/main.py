@@ -115,6 +115,6 @@ else:
     upperRange = st.number_input(label="Enter Upper Number Bound: ", value=1.0)
     stepSize = st.number_input(label="Enter Step Interval: ", value=0.01)
     Y0 = st.text_input(label="Enter Y0 of the Differential Equation as a Comma Separated List (e.g. 0,1,2,3...): ", value="0.5") # Set the initial condition
-    selected_constants = st.selectbox(label="Enter The Solving Method You Wish To Use Here:", options=["Base", "Leapfrog", "RK4"])
+    selected_constants = st.selectbox(label="Enter The Solving Method You Wish To Use Here:", options=["Trapezoidal", "Leapfrog", "RK4"])
 
     st.button(label="Solve Differential Equation", on_click=lambda: process_input_and_graph(upperRange, lowerRange, stepSize, Tex, constant_values, Y0, selected_constants))

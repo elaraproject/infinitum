@@ -11,7 +11,7 @@ from elara_symbolic.cas import solve_ode
 from elara_symbolic.numerical import RK4
 
 class Differential_Equation:
-    def __init__(self, strConstants: list[str], Tex: str):
+    def __init__(self, constants: dict[str : float], Tex: str):
 
         def process_raw_text(Tex: str):
             r"""Implements a method for processing a raw user input string
@@ -148,21 +148,21 @@ class Differential_Equation:
             self._dep_func = dep_func            
             self._expr = expr
         
-        def process_constants(self, Constants: list[str]) -> dict[str : sympy.Symbol]:
+        def process_constants(self, Constants: dict[str : float]):
             # create a dictionary of constants for the parsing
-            parseConstants = { i : Symbol(i, constant=True, real=True) for i in Constants }
+            replaceConstants = { i : Symbol(i, constant=True, real=True) for i in Constants.keys() }
             # substitute parsed constants
-            self._expr = self._expr.subs(parseConstants)
-            return parseConstants
+            self._expr = self._expr.subs(replaceConstants)
 
-        #Begin by processing the latex so that it can be processed correctly by 
+       #Begin by processing the latex so that it can be processed correctly by 
         unprocessed_sympy = parse_latex(process_raw_text(Tex), strict = False)
         #Save the string we created
         self._latex = Tex
         #This function here saves the differential equation's information as class variables that can be accessed by properties
         process_differential_equation(self, unprocessed_sympy)
         #Finish processing the differential equations by substituting in the constants and save the list of constants as a property
-        self._constants = process_constants(self, {i for i in strConstants})
+        process_constants(self, constants)
+        self._constants = constants
     
     #Properties of the function that should not be modifiable parts of the class
     @property
@@ -261,23 +261,15 @@ class Differential_Equation_Solution:
             return a
             
         de_sols = {}
-        constantPass = [(diffeq.constants[i], diffeq.constants.values()[i]) for i in diffeq.constants.keys()]
-        if self._solver == "Base":
-            de_sols = solve_ode(diffeq.expr, diffeq.dep_func, solver="auto", y0=Y0[0], t_span=(lowerRange, upperRange), constants=constantPass, step_size=stepSize)
-            de_sols['y'] = de_sols["x"]
-            """
-            if sympy.ode_order(diffeq.expr, diffeq.dep_func) == 1:
-                de_sols = solve_ode(diffeq.expr, diffeq.dep_func, solver="auto", y0=Y0[0], t_span=(lowerRange, upperRange), constants=constantPass, step_size=stepSize)
-                # the following line fixes an elara-symbolic incompatibility
-                # since elara-symbolic names the dependent variable "x"
-                # but we use "y" as the dependent variable
-                # de_sols['y'] = de_sols["x"]
+        constantPass = [(sympy.Symbol(i, constant=True, real=True), diffeq.constants[i]) for i in diffeq.constants.keys()]
+        if self._solver == "Trapezoidal":
+            if diffeq.order == 1:
+                de_sols = solve_ode(diffeq.expr, diffeq.dep_func, solver="trapezoidal", y0=Y0[0], t_span=(lowerRange, upperRange), constants=constantPass, step_size=stepSize)
             else:
                 if len(Y0) < 2:
                     raise ValueError("Value of Y0 should have at least 2 arguments for 2nd-order ODE or higher!")
                 de_sols = solve_ode(diffeq.expr, diffeq.dep_func, solver="auto", y0=Y0[0], v0=Y0[1], t_span=(lowerRange, upperRange), constants=constantPass, step_size=stepSize)
                 de_sols['y'] = de_sols["x"][:, 0]
-            """
         elif self._solver == "leapfrog":
             if sympy.ode_order(diffeq.expr, diffeq.dep_func) == 1:
                 de_sols = solve_ode(diffeq.expr, diffeq.dep_func, solver="leapfrog", y0=Y0[0], t_span=(lowerRange, upperRange), constants=constantPass, step_size=stepSize)
@@ -287,7 +279,7 @@ class Differential_Equation_Solution:
                     raise ValueError("Value of Y0 should have at least 2 arguments for 2nd-order ODE or higher!")
                 de_sols = solve_ode(diffeq.expr, diffeq.dep_func, solver="leapfrog", y0=Y0[0], v0=Y0[1], t_span=(lowerRange, upperRange), constants=constantPass, step_size=stepSize)
                 de_sols['y'] = de_sols["x"][:, 0]
-        elif solver == "RK4":
+        elif self._solver == "RK4":
             temp = substitute_higher_differentials(diffeq.expr, diffeq.dep_func)
             higherOrderMatrix = convert_diffeq_to_matrix(*temp)
             if sympy.ode_order(diffeq.expr, diffeq.dep_func) == 1:
@@ -309,11 +301,6 @@ class Differential_Equation_Solution:
                 functions.append(newKeyName)
                     
         #create a dataframe containing the date and time and plot that dataframe
-        # this dataframe can be pretty slow to
-        # initialize though, so this
-        # is used here to prevent the UI elements
-        # from being displayed until the dataframe
-        # is successfully populated
         self._functions = functions
         self._plotDF = DataFrame({"x": de_sols['t']} | {kv: de_sols[kv].reshape(-1) for kv in functions})
 
