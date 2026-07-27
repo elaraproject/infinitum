@@ -106,7 +106,7 @@ else:
         st.stop()
     
     # code for selecting what will be a constant and setting the value of said constant
-    selected_constants = st.multiselect(label="Enter List of Constants", options=list('abcdefghijklmnopqrstuvwxyz'))
+    selected_constants = st.multiselect(label="Enter List of Constants", options=list('abcdefghijklmnopqrstuvwxyz')+list('ABCDEFGHIJKLMNOPQRSTUVWXYZ'))
     constant_values = {i : 0.0 for i in selected_constants}
     if constant_values is None:
         constant_values = {}
