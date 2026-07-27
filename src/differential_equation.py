@@ -263,34 +263,57 @@ class Differential_Equation_Solution:
         de_sols = {}
         constantPass = [(sympy.Symbol(i, constant=True, real=True), diffeq.constants[i]) for i in diffeq.constants.keys()]
         if self._solver == "Trapezoidal":
-            if diffeq.order == 1:
-                de_sols = solve_ode(diffeq.expr, diffeq.dep_func, solver="trapezoidal", y0=Y0[0], t_span=(lowerRange, upperRange), constants=constantPass, step_size=stepSize)
-            else:
-                if len(Y0) < 2:
-                    raise ValueError("Value of Y0 should have at least 2 arguments for 2nd-order ODE or higher!")
-                de_sols = solve_ode(diffeq.expr, diffeq.dep_func, solver="auto", y0=Y0[0], v0=Y0[1], t_span=(lowerRange, upperRange), constants=constantPass, step_size=stepSize)
-                de_sols['y'] = de_sols["x"][:, 0]
-        elif self._solver == "leapfrog":
+            # Currently trapezoidal does not have support for
+            # anything other than scalar 1st-order ODEs
+            # this will be fixed in the future when
+            # https://codeberg.org/elaraproject/elara-symbolic/issues/25
+            # is complete but for now, higher-order ODE support is nonexistent
+            # for the trapezoidal solver
+            if sympy.ode_order(diffeq.expr, diffeq.dep_func) != 1:
+                raise ValueError("The trapezoidal solver is for 1st-order ODEs only!")
+            if len(Y0) != 1:
+                raise ValueError("Value of Y0 should have only 1 argument for 1st-order ODEs")
+            de_sols = solve_ode(diffeq.expr, diffeq.dep_func, solver="trapezoidal", y0=Y0[0], t_span=(lowerRange, upperRange), constants=constantPass, step_size=stepSize)
+            # Temporary fix; since elara-symbolic returns a solution named x(t)
+            # regardless of what variable the differential equation is,
+            # even if the differential equation is in the form dy/dx = ...
+            # the solution would still be labelled "x"
+            # hence we need to set an alias where "y" points
+            # to the solution, which is stored under the key "x"
+            de_sols['y'] = de_sols["x"]
+        elif self._solver == "Leapfrog":
+            print(diffeq)
+            if sympy.ode_order(diffeq.expr, diffeq.dep_func) != 2:
+                raise ValueError("The leapfrog solver is for 2nd-order ODEs only!")
+            if len(Y0) != 2:
+                raise ValueError("Value of Y0 should have at least 2 arguments for 2nd-order ODE or higher!")
+            de_sols = solve_ode(diffeq.expr, diffeq.dep_func, solver="leapfrog", y0=Y0[0], v0=Y0[1], t_span=(lowerRange, upperRange), constants=constantPass, step_size=stepSize)
+            de_sols['y'] = de_sols["x"][:, 0]
+        elif self._solver == "RK4":
             if sympy.ode_order(diffeq.expr, diffeq.dep_func) == 1:
-                de_sols = solve_ode(diffeq.expr, diffeq.dep_func, solver="leapfrog", y0=Y0[0], t_span=(lowerRange, upperRange), constants=constantPass, step_size=stepSize)
+                de_sols = solve_ode(diffeq.expr, diffeq.dep_func, solver="RK4", y0=Y0[0], t_span=(lowerRange, upperRange), constants=constantPass, step_size=stepSize)
                 de_sols['y'] = de_sols["x"]
             else:
-                if len(Y0) < 2:
-                    raise ValueError("Value of Y0 should have at least 2 arguments for 2nd-order ODE or higher!")
-                de_sols = solve_ode(diffeq.expr, diffeq.dep_func, solver="leapfrog", y0=Y0[0], v0=Y0[1], t_span=(lowerRange, upperRange), constants=constantPass, step_size=stepSize)
-                de_sols['y'] = de_sols["x"][:, 0]
-        elif self._solver == "RK4":
-            temp = substitute_higher_differentials(diffeq.expr, diffeq.dep_func)
-            higherOrderMatrix = convert_diffeq_to_matrix(*temp)
-            if sympy.ode_order(diffeq.expr, diffeq.dep_func) == 1:
-                f = sympy.lambdify((diffeq.indep_var, diffeq.dep_func), diffeq.expr.rhs, modules="numpy")
-            else:
-                def f(t, y):
-                    return higherOrderMatrix @ y
-            x0 = np.array([_ for _ in Y0])
-            de_sols = RK4(f, x0=x0, t_span=(lowerRange, upperRange), step_size=stepSize)
-            if 'v' in de_sols:
-                de_sols['y'] = de_sols["x"][:, 0]
+                # Since solve_ode does not support RK4 with higher-order ODEs,
+                # we manually perform reduction of order and call the RK4 solver directly
+                temp = substitute_higher_differentials(diffeq.expr, diffeq.dep_func)
+                higherOrderMatrix = convert_diffeq_to_matrix(*temp)
+                order = higherOrderMatrix.shape[0]
+                if len(Y0) < order:
+                    raise ValueError(f"Value of Y0 should have at least {order} arguments!")
+                if sympy.ode_order(diffeq.expr, diffeq.dep_func) == 1:
+                    f = sympy.lambdify((diffeq.indep_var, diffeq.dep_func), diffeq.expr.rhs, modules="numpy")
+                else:
+                    def f(t, y):
+                        return higherOrderMatrix @ y
+                x0 = np.array([_ for _ in Y0])
+                de_sols = RK4(f, x0=x0, t_span=(lowerRange, upperRange), step_size=stepSize)
+                if 'v' in de_sols:
+                    de_sols['y'] = de_sols["x"][:, 0]
+        else:
+            raise ValueError(f"Solver method {self._solver} does not exist!")
+        if not de_sols:
+            raise ValueError("Numerical solution to ODE was not found!")
         self._de_sols = de_sols
 
         functions = ['y']

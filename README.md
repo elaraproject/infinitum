@@ -102,10 +102,14 @@ poetry run streamlit run src/main.py --server.headless true
 streamlit run src/main.py --server.headless true
 ```
 
+### Developer gotchas
+
+The app may emit certain errors when Streamlit's refresh app feature is used from the UI. We recommend instead stopping the streamlit server and restarting the app manually from the command line to avoid this issue.
+
 ## Future Features
 
-- Create an interface capable of processing and solving differential equations input as LaTeX by users
-- Add graphs of the differential equations so that the user can visualize the equation they have input
+- [x] Create an interface capable of processing and solving differential equations input as LaTeX by users
+- [x] Add graphs of the differential equations so that the user can visualize the equation they have input
 
 ## Support Project Elara
 

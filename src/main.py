@@ -26,7 +26,10 @@ def process_input_and_graph(upperRange: int, lowerRange: int, stepSize: int, Tex
                 try:
                     diffeq = Differential_Equation(constantValues, Tex)
                     de_sols = Differential_Equation_Solution(diffeq, upperRange, lowerRange, stepSize, Y0, solver)
-                except ValueError as e:
+                # Catch all exceptions; while this is typically
+                # not a good practice, we don't want the app to break
+                # no matter what error it returns, so we use a catch-all here
+                except Exception as e:
                     st.error(f"Solve unsuccessful: {str(e)}")
                 solve_complete = True
             if de_sols:
@@ -51,7 +54,7 @@ if "ode_solution" in st.session_state:
         st.success("Solve successful! Plotting solution...")
         st.write(rf"**Numerical solution to** ${st.session_state["latex"]}$")
         if len(st.session_state['functions']) > 1:
-            selected_funcs = st.multiselect("Select Derivatives You Want to Use", st.session_state["functions"], default=st.session_state["functions"][0])
+            selected_funcs = st.multiselect("Select Functions/Derivatives You Want to Plot", st.session_state["functions"], default=st.session_state["functions"][0])
         else:
             selected_funcs = st.session_state["functions"]
         st.line_chart(data=st.session_state["ode_solution"], x='x', y=selected_funcs)
@@ -115,6 +118,6 @@ else:
     upperRange = st.number_input(label="Enter Upper Number Bound: ", value=1.0)
     stepSize = st.number_input(label="Enter Step Interval: ", value=0.01)
     Y0 = st.text_input(label="Enter Y0 of the Differential Equation as a Comma Separated List (e.g. 0,1,2,3...): ", value="0.5") # Set the initial condition
-    selected_constants = st.selectbox(label="Enter The Solving Method You Wish To Use Here:", options=["Trapezoidal", "Leapfrog", "RK4"])
+    selected_constants = st.selectbox(label="Enter The Solving Method You Wish To Use Here:\n(Note that trapezoidal is for 1st-order ODEs only)", options=["Trapezoidal", "Leapfrog", "RK4"])
 
     st.button(label="Solve Differential Equation", on_click=lambda: process_input_and_graph(upperRange, lowerRange, stepSize, Tex, constant_values, Y0, selected_constants))
