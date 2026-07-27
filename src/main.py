@@ -115,7 +115,7 @@ else:
 
     # This is the code for the components letting the user set the bounds of the graph
     lowerRange = st.number_input(label="Enter Lower Number Bound: ", value=0.0)
-    upperRange = st.number_input(label="Enter Upper Number Bound: ", value=1.0)
+    upperRange = st.number_input(label="Enter Upper Number Bound: ", value=6.0)
     stepSize = st.number_input(label="Enter Step Interval: ", value=0.01)
     Y0 = st.text_input(label="Enter Y0 of the Differential Equation as a Comma Separated List (e.g. 0,1,2,3...): ", value="0.5") # Set the initial condition
     selected_constants = st.selectbox(label="Enter The Solving Method You Wish To Use Here:", options=["RK4", "Trapezoidal", "Leapfrog"])

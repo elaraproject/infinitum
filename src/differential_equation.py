@@ -291,13 +291,18 @@ class Differential_Equation_Solution:
             de_sols['y'] = de_sols["x"][:, 0]
         elif self._solver == "RK4":
             if sympy.ode_order(diffeq.expr, diffeq.dep_func) == 1:
+                if len(Y0) != 1:
+                    raise ValueError("Y0 should have only one value for a 1st-order ODE!")
                 de_sols = solve_ode(diffeq.expr, diffeq.dep_func, solver="RK4", y0=Y0[0], t_span=(lowerRange, upperRange), constants=constantPass, step_size=stepSize)
                 de_sols['y'] = de_sols["x"]
             else:
                 # Since solve_ode does not support RK4 with higher-order ODEs,
                 # we manually perform reduction of order and call the RK4 solver directly
                 temp = substitute_higher_differentials(diffeq.expr, diffeq.dep_func)
-                higherOrderMatrix = convert_diffeq_to_matrix(*temp)
+                try:
+                    higherOrderMatrix = convert_diffeq_to_matrix(*temp)
+                except:
+                    raise ValueError("RK4 solver failed in performing reduction of order. You may want to try leapfrog instead.")
                 order = higherOrderMatrix.shape[0]
                 if len(Y0) < order:
                     raise ValueError(f"Value of Y0 should have at least {order} arguments!")
