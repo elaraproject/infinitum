@@ -106,12 +106,33 @@ else:
         st.stop()
     
     # code for selecting what will be a constant and setting the value of said constant
-    selected_constants = st.multiselect(label="Enter List of Constants", options=list('abcdefghijklmnopqrstuvwxyz')+list('ABCDEFGHIJKLMNOPQRSTUVWXYZ'))
-    constant_values = {i : 0.0 for i in selected_constants}
-    if constant_values is None:
-        constant_values = {}
-    for letter in selected_constants:
-        constant_values[letter] = st.number_input(label=f"enter constant value for {letter}: ", value=0.0)
+    selected_constants = st.text_input(label="Enter List of Constants (e.g. a,b,C,β)")
+    constant_values = {}
+    #Here we run a script to check whether the selected constants and valid and otherwise warn the user if they enter an invalid value
+    try:
+        #get each individual letter
+        selected_constants = selected_constants.split(",")
+        #check if they are alphanumeric and are a single character length or that the list is simply empty
+        selected_constants = [x for x in selected_constants if x != ''] #remove all partitions processed as blank
+        if selected_constants != []:
+            for i in selected_constants:
+                if len(i) != 1:
+                    raise(ValueError)
+                if not i.isalpha():
+                    raise(ValueError)
+        
+        constant_values = {i : 0.0 for i in selected_constants}
+        #create a box for the user to input the value of each constant
+        col1, col2 = st.columns(2)
+        if constant_values is not None:
+            for letter in selected_constants:
+                with col1:
+                    constant_values[letter] = st.number_input(label=f"enter constant value for {letter}: ", value=0.0)
+    except:
+        st.warning("please enter the constants as a comma separated list of letter characters with no numbers of special characters! (e.g. a,b,c,β)", icon="⚠️")
+        print("[Error] please enter the constants as a comma separated list of letter characters with no numbers of special characters!")
+
+    print(constant_values)
 
     # This is the code for the components letting the user set the bounds of the graph
     lowerRange = st.number_input(label="Enter Lower Number Bound: ", value=0.0)
