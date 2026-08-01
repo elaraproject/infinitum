@@ -105,20 +105,26 @@ else:
     if not Tex:
         st.stop()
     
-    # code for selecting what will be a constant and setting the value of said constant
-    selected_constants = st.text_input(label="Enter List of Constants (e.g. a,b,C,β)")
     constant_values = {}
+    selected_constants = mathquill_input(
+                        label="Enter Constant List Here",
+                        value="",
+                        key="const_input",
+                        placeholder=": a,b,c"
+                    )
+    print(selected_constants)
     #Here we run a script to check whether the selected constants and valid and otherwise warn the user if they enter an invalid value
     try:
         #get each individual letter
         selected_constants = selected_constants.split(",")
+        print(selected_constants)
         #check if they are alphanumeric and are a single character length or that the list is simply empty
         selected_constants = [x for x in selected_constants if x != ''] #remove all partitions processed as blank
         if selected_constants != []:
             for i in selected_constants:
-                if len(i) != 1:
+                if len(i) != 1 and i[0] != '\\':
                     raise(ValueError)
-                if not i.isalpha():
+                elif not i.isalpha() and i[0] != '\\':
                     raise(ValueError)
         
         constant_values = {i : 0.0 for i in selected_constants}
