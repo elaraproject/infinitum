@@ -25,6 +25,7 @@ def process_input_and_graph(upperRange: int, lowerRange: int, stepSize: int, Tex
             while not solve_complete:
                 try:
                     diffeq = Differential_Equation(constantValues, Tex)
+                    print(diffeq)
                     de_sols = Differential_Equation_Solution(diffeq, upperRange, lowerRange, stepSize, Y0, solver)
                 # Catch all exceptions; while this is typically
                 # not a good practice, we don't want the app to break
@@ -112,12 +113,10 @@ else:
                         key="const_input",
                         placeholder=": a,b,c"
                     )
-    print(selected_constants)
     #Here we run a script to check whether the selected constants and valid and otherwise warn the user if they enter an invalid value
     try:
         #get each individual letter
         selected_constants = selected_constants.split(",")
-        print(selected_constants)
         #check if they are alphanumeric and are a single character length or that the list is simply empty
         selected_constants = [x for x in selected_constants if x != ''] #remove all partitions processed as blank
         if selected_constants != []:
@@ -133,18 +132,32 @@ else:
         if constant_values is not None:
             for letter in selected_constants:
                 with col1:
-                    constant_values[letter] = st.number_input(label=f"enter constant value for {letter}: ", value=0.0)
+                    #first if statement displays inline if it is a latex character like \alpha and second is for regular characters
+                    if letter[0] == '\\':
+                        constant_values[letter] = st.number_input(label=rf"enter constant value for ${letter}$: ", value=0.0)
+                    if letter[0] != '\\':
+                        constant_values[letter] = st.number_input(label=rf"enter constant value for {letter}: ", value=0.0)
+        #This block of code loops through each entry of constant values and if its a latex character like \alpha it gets rid of the \
+        #and replace said \ with no backslash for easier parsing by sympy once we get to that point otherwise it just saves in new constants
+        new_constant_values = {}
+        for i in constant_values:
+            j = constant_values[i]
+            if i[0] == r'\\'[0]:
+                new_key = i[1:]
+                new_constant_values[new_key] = j
+            else:
+                new_constant_values[i] = j
+        #update constant_value key names to reflect the change.
+        constant_values = new_constant_values
     except:
         st.warning("please enter the constants as a comma separated list of letter characters with no numbers of special characters! (e.g. a,b,c,β)", icon="⚠️")
         print("[Error] please enter the constants as a comma separated list of letter characters with no numbers of special characters!")
-
-    print(constant_values)
 
     # This is the code for the components letting the user set the bounds of the graph
     lowerRange = st.number_input(label="Enter Lower Number Bound: ", value=0.0)
     upperRange = st.number_input(label="Enter Upper Number Bound: ", value=6.0)
     stepSize = st.number_input(label="Enter Step Interval: ", value=0.01)
     Y0 = st.text_input(label="Enter Y0 of the Differential Equation as a Comma Separated List (e.g. 0,1,2,3...): ", value="0.5") # Set the initial condition
-    selected_constants = st.selectbox(label="Enter The Solving Method You Wish To Use Here:", options=["RK4", "Trapezoidal", "Leapfrog"])
+    method = st.selectbox(label="Enter The Solving Method You Wish To Use Here:", options=["RK4", "Trapezoidal", "Leapfrog"])
 
-    st.button(label="Solve Differential Equation", on_click=lambda: process_input_and_graph(upperRange, lowerRange, stepSize, Tex, constant_values, Y0, selected_constants))
+    st.button(label="Solve Differential Equation", on_click=lambda: process_input_and_graph(upperRange, lowerRange, stepSize, Tex, constant_values, Y0, method))
