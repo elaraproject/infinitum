@@ -23,8 +23,22 @@ dependencies = [
 requires = ["poetry-core>=2.0.0,<3.0.0"]
 build-backend = "poetry.core.masonry.api"
 
+# Packages for development (not needed for app functionality)
+[tool.poetry.group.dev]
+optional = true
+
+[tool.poetry.group.dev.dependencies]
+pre-commit = ">=3.4.0,<4.0.0"
+ruff = ">=0.0.286,<1.0.0"
+
 # Use poetry only for dependency management
 # in the future delete this so that people
 # can install the app with `pip install elara-symbolic-ui`
 [tool.poetry]
 package-mode = false
+
+# Code formatting options
+[tool.ruff]
+line-length = 88
+target-version = "py312"
+exclude = [".venv", "build", "dist", "__pycache__", ".git"]

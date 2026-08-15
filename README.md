@@ -55,7 +55,8 @@ pipx install poetry
 Assuming you have Poetry installed, run the following command to resolve and install dependencies from the `pyproject.toml` file. 
 
 ```bash
-poetry install
+poetry install --all-groups # full installation with all library features (recommended)
+poetry run pre-commit install
 ```
 
 > **Note:** This is needed **only** on the first installation!
@@ -74,16 +75,23 @@ python -m pytest tests/test_differential_equation.py
 
 The MathQuill component prefers locally vendored assets under `src/mathquill_component_frontend/vendor/` and only falls back to CDN loading if those files are unavailable.
 
+[Ruff](https://docs.astral.sh/ruff/) is configured as the main Python linter and formatter and the pre-commit hook checks the source code to ensure uniform code style before pushing.
 
 ### Alternative installation
 
-If you don't want to use Poetry, it is also possible to install dependencies with just pip;
+If you don't want to use Poetry, it is also possible to install dependencies with just pip (preferably in a virtual environment):
 
 ```bash
 pip install -r requirements.txt
 ```
 
-Then, from the repo you have cloned, just run the following commands to launch the app:
+You will need to install Ruff and pre-commit separately (`pip install ruff pre-commit`). Afterwards, you can set up our pre-commit hook with:
+
+```
+pre-commit install
+```
+
+Then, just run the following commands to launch the app:
 
 ```bash
 python -m streamlit src/main.py
