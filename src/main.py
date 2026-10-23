@@ -20,8 +20,29 @@ from mathquill_component import mathquill_input
 # History file storage
 HISTORY_FILE = Path.home() / ".infinitum_history.json"
 
-# Equation types for the input selector; only ODEs are solved so far
-EQUATION_TYPES = ["Solve ODE"]
+# Equation types for the input selector
+EQUATION_TYPES = ["Solve ODE", "Linear algebra"]
+
+def show_linear_algebra(expr_text):
+    """Evaluate a SymPy matrix/vector expression numerically with user-supplied values."""
+    try:
+        expr = sympy.sympify(expr_text)
+    except (sympy.SympifyError, SyntaxError, TypeError) as err:
+        st.error(f"Could not parse expression: {err}")
+        return
+    variables = sorted(expr.free_symbols, key=lambda s: s.name)
+    values = [
+        st.number_input(label=f"Value of {s.name}", value=0.0, key=f"linalg_{s.name}")
+        for s in variables
+    ]
+    try:
+        func = sympy.lambdify(variables, expr, modules="numpy")
+        result = np.asarray(func(*values))
+    except Exception as err:
+        st.error(f"Could not evaluate expression: {err}")
+        return
+    st.success("Evaluation successful")
+    st.write(result)
 
 # Logging system
 class StreamlitLogCapture:
@@ -518,22 +539,32 @@ else:
             key="equation_type",
             label_visibility="collapsed",
         )
-    # Code for preliminary processing of the LaTeX
     with input_col:
-        try:
-            Tex = mathquill_input(
-                label="Enter Equations Here",
-                value=equation_to_load,
-                key="mq_input",
-                placeholder=r"\frac{dy}{dx} = y(1-y)",
-            )
-        except Exception:
-            # Hard fallback so equation input remains usable if the component fails.
+        if equation_type == "Linear algebra":
             Tex = st.text_input(
-                label="Enter Equations Here (LaTeX)",
-                value=equation_to_load,
-                key="mq_input_fallback",
+                label="Enter Matrix Expression (SymPy syntax)",
+                value="Matrix([[cos(t), sin(t)], [-sin(t), cos(t)]])*Matrix([x, y])",
+                key="linalg_input",
             )
+        else:
+            # Code for preliminary processing of the LaTeX
+            try:
+                Tex = mathquill_input(
+                    label="Enter Equations Here",
+                    value=equation_to_load,
+                    key="mq_input",
+                    placeholder=r"\frac{dy}{dx} = y(1-y)",
+                )
+            except Exception:
+                # Hard fallback so equation input remains usable if the component fails.
+                Tex = st.text_input(
+                    label="Enter Equations Here (LaTeX)",
+                    value=equation_to_load,
+                    key="mq_input_fallback",
+                )
+    if equation_type == "Linear algebra":
+        show_linear_algebra(Tex)
+        st.stop()
     # Pause execution if equation is not yet parsed
     if not Tex:
         st.stop()
