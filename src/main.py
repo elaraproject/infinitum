@@ -20,6 +20,9 @@ from mathquill_component import mathquill_input
 # History file storage
 HISTORY_FILE = Path.home() / ".infinitum_history.json"
 
+# Equation types for the input selector; only ODEs are solved so far
+EQUATION_TYPES = ["Solve ODE"]
+
 # Logging system
 class StreamlitLogCapture:
     """Capture logs and errors for display in UI."""
@@ -506,21 +509,31 @@ else:
     equation_to_load = st.session_state["diffeq"] if "diffeq" \
                         in st.session_state else default_ode
 
+    # Equation type selector sits to the left of the input bar
+    selector_col, input_col = st.columns([1, 3])
+    with selector_col:
+        equation_type = st.selectbox(
+            label="Equation type",
+            options=EQUATION_TYPES,
+            key="equation_type",
+            label_visibility="collapsed",
+        )
     # Code for preliminary processing of the LaTeX
-    try:
-        Tex = mathquill_input(
-            label="Enter Equations Here",
-            value=equation_to_load,
-            key="mq_input",
-            placeholder=r"\frac{dy}{dx} = y(1-y)",
-        )
-    except Exception:
-        # Hard fallback so equation input remains usable if the component fails.
-        Tex = st.text_input(
-            label="Enter Equations Here (LaTeX)",
-            value=equation_to_load,
-            key="mq_input_fallback",
-        )
+    with input_col:
+        try:
+            Tex = mathquill_input(
+                label="Enter Equations Here",
+                value=equation_to_load,
+                key="mq_input",
+                placeholder=r"\frac{dy}{dx} = y(1-y)",
+            )
+        except Exception:
+            # Hard fallback so equation input remains usable if the component fails.
+            Tex = st.text_input(
+                label="Enter Equations Here (LaTeX)",
+                value=equation_to_load,
+                key="mq_input_fallback",
+            )
     # Pause execution if equation is not yet parsed
     if not Tex:
         st.stop()
